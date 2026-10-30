@@ -125,6 +125,16 @@ class StudioToolsTest extends TestCase {
 		$this->assertSame( 'update', ( new RevisionRepository() )->get( 5, 30 )['action'] );
 		$repo->deleteForPage( 5 );
 		$this->assertSame( array(), $repo->listFor( 5 ) );
+
+		// Daily clean-up removes the history of deleted pages only.
+		global $wpdb;
+		$wpdb->query( 'INSERT INTO wp_posts (ID) VALUES (7)' );
+		$repo->add( array( 'page_id' => 7, 'elements' => array() ) );
+		$repo->add( array( 'page_id' => 8, 'elements' => array() ) );
+		$repo->add( array( 'page_id' => 8, 'elements' => array() ) );
+		$this->assertSame( 2, $repo->pruneOrphans() );
+		$this->assertCount( 1, $repo->listFor( 7 ) );
+		$this->assertSame( array(), $repo->listFor( 8 ) );
 	}
 
 	public function testDraftManagerRecordsRevisionsAndOutsideEdits(): void {
@@ -201,7 +211,9 @@ class StudioToolsTest extends TestCase {
 		$row     = self::box(
 			'aaaa010',
 			array(
-				self::box( 'aaaa011', array( $h4 ), array( 'width' => ElementorMapper::columnWidth( 3, 24 ), 'width_tablet' => ElementorMapper::columnWidth( 2, 24 ) ), true ),
+				self::box( 'aaaa011', array( $h4 ), array( 'width' => ElementorMapper::columnWidth( 3, 24 ), 'width_mobile' => ElementorMapper::columnWidth( 2, 24 ) ), true ),
+				self::box( 'aaaa013', array(), array( 'width' => ElementorMapper::columnWidth( 3, 24 ), 'width_tablet' => ElementorMapper::columnWidth( 2, 24 ) ), true ), // Empty phone width = 100% in Elementor.
+
 				self::box( 'aaaa012', array( $h1b ), array( 'width' => ElementorMapper::columnWidth( 3, 24 ), 'width_mobile' => ElementorMapper::columnWidth( 1, 24 ) ), true ),
 			),
 			array( 'flex_direction' => 'row' ),
@@ -214,7 +226,7 @@ class StudioToolsTest extends TestCase {
 		$this->assertTrue( str_contains( implode( ' ', array_column( $report['findings'], 'message' ) ), 'has 2 H1 headings' ) );
 		$this->assertTrue( str_contains( implode( ' ', array_column( $report['findings'], 'message' ) ), 'An H4 follows an H1' ) );
 		$responsive = array_values( array_filter( $report['findings'], static fn ( array $f ): bool => 'responsive' === $f['category'] ) );
-		$this->assertSame( array( array( 'aaaa001' ), array( 'aaaa011' ), array( 'aaaa020' ) ), array_column( $responsive, 'elements' ), 'big heading, a column that stays side by side (the other stacks), big padding' );
+		$this->assertSame( array( array( 'aaaa001' ), array( 'aaaa011' ), array( 'aaaa020' ) ), array_column( $responsive, 'elements' ), 'big heading, the column with an explicit narrow phone width (an empty one is 100%), big padding' );
 		$fixed = Findings::apply( $page, $report['findings'], array_column( $report['findings'], 'id' ) );
 		$after = ( new ConsistencyChecker( array() ) )->check( $fixed['elements'] );
 		$this->assertSame( array(), array_values( array_filter( $after['findings'], static fn ( array $f ): bool => 'responsive' === $f['category'] ) ) );

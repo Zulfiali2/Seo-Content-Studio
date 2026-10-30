@@ -1,6 +1,6 @@
 # Development status — AI Website Studio
 
-Last updated: 2026-10-30. Plugin version **1.9.0-beta.4** (DB version 8). Target for the full studio: 1.9.0.
+Last updated: 2026-10-30. Plugin version **1.9.0-rc.1** (DB version 8). Target for the full studio: 1.9.0.
 
 ## Summary
 
@@ -42,7 +42,10 @@ Last updated: 2026-10-30. Plugin version **1.9.0-beta.4** (DB version 8). Target
 | 7 | Design Library (save, preview, edit, duplicate, delete, insert) | ✅ Implemented |
 | 7 | Responsive generator (engine values + responsive checks/fixes + section action) | ✅ Implemented |
 | 7 | REST `/design/pages/{id}/*`, `/design/proposals/*`, `/design/library/*`; Page Tools, Consistency, Library, Revisions screens | ✅ Implemented |
-| 8 | Live WP/Elementor QA matrix, 1.9.0 packaging | ⏳ Not started |
+| 8 | Automated tests (94), security suite and review, performance benchmark | ✅ Done (1.9.0-rc.1), see QA-REPORT.md |
+| 8 | Compatibility: PHP 8.2+ syntax, WP 6.6 APIs, Elementor 4.0 setting keys, SQLite portability | ✅ Checked statically |
+| 8 | Live WordPress + Elementor Free/Pro run (`tests/integration/smoke.php`, TESTING.md 1–36) | ⏳ Open: running WordPress/Elementor was not permitted in this environment |
+| 8 | Documentation (USER-GUIDE, QA-REPORT) and release-candidate ZIP | ✅ Done |
 
 "Implemented" means the code is written and unit-tested. It does **not** mean it has been verified in a running WordPress site (see Known limitations).
 
@@ -57,6 +60,16 @@ Last updated: 2026-10-30. Plugin version **1.9.0-beta.4** (DB version 8). Target
 | D: Brand consistency (generate → compare with profile/reference pages → report → apply recommendations) | Code complete; needs a live run (TESTING.md 33) |
 | E: Section regeneration (select → regenerate → preview → approve → revision) | Code complete; needs a live run (TESTING.md 31–32) |
 | F: Design library (save → preview → insert into a draft) | Code complete; needs a live run (TESTING.md 35–36) |
+
+## Files changed in 1.9.0-rc.1
+
+- `Engine/DocumentValidator.php` (`unfiltered_html` rule)
+- `Editor/ConsistencyChecker.php` (phone width)
+- `Persistence/RevisionRepository.php` (portable prune)
+- `Sections/SectionWriter.php` (layout fallback)
+- `bin/build-zip.sh`
+- `tests/unit/SecurityTest.php`, `tests/benchmark.php`, `tests/integration/smoke.php`, test updates
+- `docs/website-studio/USER-GUIDE.md`, `QA-REPORT.md`, docs, version files
 
 ## Files changed in 1.9.0-beta.4
 
@@ -149,7 +162,9 @@ Changed:
 
 - `php -l` on every PHP file: no syntax errors (PHP 8.3).
 - `node --check assets/website-studio/studio.js`: OK.
-- `php tests/run.php`: **88 passed, 0 failed**.
+- `php tests/run.php`: **94 passed, 0 failed**.
+- `php tests/benchmark.php`: all steps within budget (QA-REPORT.md §3).
+- `tests/integration/smoke.php`: written; not yet run (needs a live site).
 - Page Tools and Design Library screens rendered in Chromium (React 18, stubbed WordPress components, REST answers produced by the real PHP services): preview device switch, section regeneration → proposal → preview → approve, consistency and accessibility checks with fixes (including entered alt text), revision compare and undo section, library insert/duplicate/edit; no console errors.
 - AI Page Generator screen rendered in Chromium (React 18, stubbed WordPress components and REST): brief → review → approve a link → draft → image review; no console errors, and the REST bodies sent are the ones the endpoints expect.
 - Converter benchmark: a page with about 2,000 elements and 1,500 CSS rules converts in 0.12 s (12 MB peak).
@@ -197,7 +212,7 @@ Changed:
 
 ## Security issues
 
-None open. See `docs/SECURITY.md`, sections "AI Website Studio" and "cloning and page building".
+None open. Phase 8 fixed one (copied scripts for users without `unfiltered_html`, QA-REPORT.md §2). See `docs/SECURITY.md`, sections "AI Website Studio" and "cloning and page building".
 
 ## Compatibility status
 

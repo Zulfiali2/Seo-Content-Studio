@@ -49,13 +49,21 @@ final class DocumentValidator {
 	private $attachmentExists;
 
 	/**
+	 * Whether the current user may publish unfiltered HTML (scripts in copied content).
+	 *
+	 * @var callable(): bool
+	 */
+	private $unfilteredHtml;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param ElementorCompat $compat            Installed Elementor.
 	 * @param callable|null   $attachment_exists Returns whether an attachment ID is an image in the Media Library.
 	 */
-	public function __construct( private readonly ElementorCompat $compat, ?callable $attachment_exists = null ) {
+	public function __construct( private readonly ElementorCompat $compat, ?callable $attachment_exists = null, ?callable $unfiltered_html = null ) {
 		$this->attachmentExists = $attachment_exists ?? static fn ( int $id ): bool => function_exists( 'wp_attachment_is_image' ) && wp_attachment_is_image( $id );
+		$this->unfilteredHtml   = $unfiltered_html ?? static fn (): bool => function_exists( 'current_user_can' ) && current_user_can( 'unfiltered_html' );
 	}
 
 	/**
@@ -253,8 +261,14 @@ final class DocumentValidator {
 	 */
 	private function walkValues( mixed $value, string $path, array &$state, bool $lenient ): void {
 		if ( ! is_array( $value ) ) {
-			if ( is_string( $value ) && ! $lenient && self::executable( $value ) ) {
-				$state['errors'][] = "$path contains script or event-handler content.";
+			if ( is_string( $value ) && self::executable( $value ) ) {
+				// Copied content may keep the site's own scripts, but only for users WordPress already
+				// trusts with unfiltered HTML; for everyone else that would be a privilege escalation.
+				if ( ! $lenient || ! ( $this->unfilteredHtml )() ) {
+					$state['errors'][] = $lenient ? "$path contains script or event-handler content, and you are not allowed to publish unfiltered HTML." : "$path contains script or event-handler content.";
+				} else {
+					$state['warnings'][] = "$path contains script or event-handler content (kept: you may publish unfiltered HTML).";
+				}
 			}
 			return;
 		}

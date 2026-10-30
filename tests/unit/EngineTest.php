@@ -336,7 +336,7 @@ class EngineTest extends TestCase {
 	}
 
 	public function testClonedModeAllowsSiteWidgetsButStillChecksStructure(): void {
-		$v      = new DocumentValidator( self::compat( true, array( 'heading', 'text-editor', 'button', 'image', 'html' ) ), static fn (): bool => false );
+		$v      = new DocumentValidator( self::compat( true, array( 'heading', 'text-editor', 'button', 'image', 'html' ) ), static fn (): bool => false, static fn (): bool => true ); // An administrator (unfiltered_html).
 		$report = $v->validate(
 			array(
 				array(

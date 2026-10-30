@@ -170,7 +170,14 @@ final class SectionWriter {
 			return $out;
 		};
 		$new['elements'] = $swap( (array) $new['elements'] );
-		$errors          = array();
+		// A kept layout must still fit what came back (e.g. the model returned no cards).
+		$groups = count( array_filter( $new['elements'], static fn ( array $e ): bool => 'group' === $e['type'] ) );
+		if ( 0 === $groups ) {
+			$new['layout']['kind'] = 'stack';
+		} elseif ( 'split' === $new['layout']['kind'] && ( 2 !== $groups || $groups !== count( $new['elements'] ) ) ) {
+			$new['layout']['kind'] = 'grid';
+		}
+		$errors = array();
 		$doc             = PageDocument::normalize(
 			array(
 				'schema_version' => PageDocument::VERSION,

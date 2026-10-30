@@ -19,6 +19,7 @@ php tests/run.php CssParser  # filter by class or method name
 | `ClonerTest` | New ids for every element and repeater item with settings kept, slot detection and protection, apply only allowed slots, AI answer validation, end-to-end clone with the source untouched |
 | `CloneJobTest` | Full job run, selection rules, no repeated AI request or second draft on retry, access loss stops the job |
 | `ConverterTest` | Selector matcher (supported and unsupported selectors, specificity), cascade (inline, specificity, media per device, inheritance), a full landing page (sections, grid 3/2/1, split, buttons and variants, cards, icons, images, tables, YouTube, accordion, gradient and contrast fixes, fallback), the report, tokens from the page's CSS, untrusted input (scripts, handlers, `javascript:`, `data:`, unknown iframes, objects, unsafe inline styles), limits, and the converted save path |
+| `SecurityTest` | XSS payload corpus through HtmlFragment, PageDocument, mapper and validator (all modes); model output cannot inject links, markup, colours or icons; `unfiltered_html` rule for copied scripts; bound SQL inputs; tampered snapshots; server-issued fix ids only; preview-manager abuse |
 | `StudioToolsTest` | Revision store (retention, snapshots), DraftManager revisions and captured Elementor edits, consistency checker (clean page, profile differences, colour fixes incl. kit globals, untouched sections), responsive and heading checks with fixes, accessibility checker (alt text, contrast, links, buttons, forms, small text) and fixes with user text, section transforms, section writer (request, structure kept, images reused, H1 rule), proposal preview/approve/discard and the regeneration job, revision compare/restore/undo section, design library (save, components, ownership, insert with new ids, duplicate, preview), REST permissions |
 | `GeneratorTest` | Generator answer to a valid PageDocument (paragraphs, prompts, CTA URL, image limit, one H1, background roles), request payload and strict schema, CTA URL safety, content-to-design rules (columns by card count and length, split/FAQ/buttons, long H1, missing H1), link suggestion validation and insertion (unpublished targets, existing links, whole words, escaping), fact check, kit tokens, all three jobs end to end with retries, image approval and discard |
 | `VisionTest` | ImageInput and messages with images, request hashes, OpenAI/Grok/Anthropic/Gemini vision bodies and capabilities, screenshot validation and tiling (tall images, metadata removal, corrupt files), temporary store (traversal, prune), strict vision schema, vision answer to a valid PageDocument (one H1, layout fixes, icons, tokens, placeholders), slots and new content (unknown keys never create elements), both screenshot jobs end to end with retries, kept text without AI |
@@ -90,3 +91,14 @@ The 1.7.0 and 1.8.0 code has **not yet been run inside WordPress**. Before relea
 34. Accessibility: an image without alt text gets alt text saved in the Media Library; a low-contrast heading is fixed; the WCAG notice is shown.
 35. Design Library: save a section and a card, preview them, insert both into another draft (ids unique, layout intact in Elementor), duplicate, rename and delete. Another non-admin user cannot see them.
 36. On a site with Flexbox Containers off, inserting a container item is refused with a clear message.
+
+### Phase 8 (1.9.0-rc.1)
+
+- `php tests/benchmark.php`: performance budgets (results in QA-REPORT.md).
+- Live smoke test on a staging site, as an administrator, from a checkout of the repository:
+
+  ```
+  wp eval-file tests/integration/smoke.php --user=admin
+  ```
+
+  It builds a draft through the real engine, checks the rendered HTML, runs a consistency fix, a section proposal → preview → approve, an outside edit and a restore, and a library insert, then deletes everything it made. Exit code 0 means all checks passed. Run it with Elementor Free, with Pro, and with Flexbox Containers off.

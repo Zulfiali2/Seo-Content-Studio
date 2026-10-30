@@ -4,7 +4,7 @@ Tags: seo, ai, content, elementor, keyword research
 Requires at least: 6.6
 Tested up to: 6.7
 Requires PHP: 8.2
-Stable tag: 1.9.0-beta.4
+Stable tag: 1.9.0-rc.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -54,6 +54,9 @@ Nothing is sent until you add a key and run an action.
 3. Go to AI SEO Studio → AI Providers, save an API key, run "Test connection", choose a text model and a default provider.
 
 == Changelog ==
+
+= 1.9.0-rc.1 =
+* AI Website Studio release candidate. Security: copied Elementor content (fixes, restores, library inserts) may only keep scripts for users allowed to publish unfiltered HTML. The responsive check follows Elementor's phone-width behaviour. Revision clean-up works on SQLite too. New user guide and QA report; live WordPress/Elementor smoke test included for staging sites.
 
 = 1.9.0-beta.4 =
 * AI Website Studio phase 7. Page Tools for studio drafts: device preview (desktop, tablet, mobile, one section), section regeneration (rewrite, improve SEO, redesign, new images, colours, typography, layout, spacing, responsive) with a preview before you approve, a Design Consistency Checker and an Accessibility Checker (WCAG 2.2 AA based) whose recommendations you apply one by one, full revision history with compare, restore and undo of one section, and a Design Library of reusable sections and components.

@@ -211,3 +211,8 @@ Report vulnerabilities privately to the plugin maintainer, not in public issues.
 - **AI section requests** send only that section's text, the page's section types, the brief and the business facts, under the same rules as the generator. Facts are never invented, and images are never invented (only existing images are reused). The answer is strict JSON and passes the PageDocument sanitisers.
 - **Revisions** are stored in the plugin's own table: compressed, limited per page and in size, deleted with the page, and pruned for deleted pages. Restores are themselves revisions.
 - **Design library** items are owned by their creator (managers see all). Saving validates the element in `cloned` mode and limits it to 1 MB. Inserting copies it with new ids, never shares ids with the target page, and is validated again.
+
+## AI Website Studio — phase 8 review (1.9.0-rc.1)
+
+- **Copied content and `unfiltered_html`.** `cloned` validation keeps an author's own page scripts only for users WordPress already trusts with unfiltered HTML. For everyone else, script and event-handler markup is refused, so the library, restores and fixes cannot be used for privilege escalation. Script URLs are refused in every mode.
+- A regression suite (`tests/unit/SecurityTest.php`) covers XSS payloads through every sanitiser, model-output injection, SQL inputs, tampered revision snapshots, fix ids that the server did not issue, and preview-page abuse. See `docs/website-studio/QA-REPORT.md` for the full review.

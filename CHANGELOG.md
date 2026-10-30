@@ -2,6 +2,22 @@
 
 All notable changes to AI SEO Content Studio. Versions follow semantic versioning.
 
+## 1.9.0-rc.1 — 2026-10-30 — AI Website Studio, phase 8: QA and release candidate
+
+Security
+- `DocumentValidator` (`cloned` mode, used by fixes, restores and library inserts) now refuses script and event-handler markup unless the current user has `unfiltered_html`. Before, a user without that capability could carry scripts into a studio draft through copied content. Script URLs stay refused in every mode.
+
+Fixed
+- Responsive consistency check: Elementor does not inherit a container's phone width from larger screens (an empty value is 100%), so columns are reported only when an explicit narrow phone width is set.
+- `RevisionRepository::pruneOrphans()` used a MySQL-only multi-table DELETE. It now uses portable statements, so it works with the WordPress SQLite integration.
+- Section rewrites that return no cards for a grid section now fall back to one column instead of failing validation.
+
+Added
+- `tests/unit/SecurityTest.php`: XSS payload corpus through every sanitiser, model-output injection, SQL inputs, tampered snapshots, fix and preview abuse, and `unfiltered_html` rules.
+- `tests/benchmark.php`: performance budgets for the largest accepted documents.
+- `tests/integration/smoke.php`: a live WordPress + Elementor smoke test (`wp eval-file … --user=admin`).
+- `docs/website-studio/USER-GUIDE.md` and `docs/website-studio/QA-REPORT.md`.
+
 ## 1.9.0-beta.4 — 2026-10-30 — AI Website Studio, phase 7: advanced features
 
 Added

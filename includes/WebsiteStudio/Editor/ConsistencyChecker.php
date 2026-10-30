@@ -447,9 +447,11 @@ final class ConsistencyChecker {
 			}
 			$parent = array() === $row['parents'] ? null : ( $by_id[ end( $row['parents'] ) ] ?? null );
 			if ( 'container' === ( $el['elType'] ?? '' ) && null !== $parent && 'row' === ( $parent['settings']['flex_direction'] ?? '' ) ) {
-				// Elementor inherits: phone = phone value, else tablet value, else desktop value.
-				$phone = $s['width_mobile'] ?? $s['width_tablet'] ?? $s['width'] ?? null;
-				if ( isset( $s['width'] ) && ! self::fullWidth( $s['width'] ) && ! self::fullWidth( $phone ) ) {
+				// Elementor does not inherit a container's phone width from larger screens: an empty
+				// phone width is 100% (container.php, "min_affected_device"). Only an explicit
+				// narrow phone width keeps columns side by side.
+				$phone = $s['width_mobile'] ?? null;
+				if ( null !== $phone && '' !== (string) ( $phone['size'] ?? '' ) && ! self::fullWidth( $phone ) ) {
 					$this->add(
 						'responsive',
 						'warning',

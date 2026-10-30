@@ -145,8 +145,15 @@ class RevisionRepository {
 	public function pruneOrphans(): int {
 		global $wpdb;
 		$table = StudioTables::revisions();
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- custom table, no user input.
-		return (int) $wpdb->query( "DELETE r FROM {$table} r LEFT JOIN {$wpdb->posts} p ON p.ID = r.page_id WHERE p.ID IS NULL" );
+		// Two portable statements (multi-table DELETE is MySQL-only), in batches.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- custom table, no user input.
+		$pages = array_map( 'intval', (array) $wpdb->get_col( "SELECT DISTINCT r.page_id FROM {$table} r LEFT JOIN {$wpdb->posts} p ON p.ID = r.page_id WHERE p.ID IS NULL LIMIT 200" ) );
+		$count = 0;
+		foreach ( $pages as $page_id ) {
+			$count += (int) $wpdb->delete( $table, array( 'page_id' => $page_id ), array( '%d' ) );
+		}
+		// phpcs:enable
+		return $count;
 	}
 
 	/**
