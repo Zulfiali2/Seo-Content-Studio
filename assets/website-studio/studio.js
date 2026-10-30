@@ -23,6 +23,8 @@
 
 	const SECTION_LABELS = {
 		hero: __( 'Hero', T ),
+		features: __( 'Features / benefits', T ),
+		about: __( 'About', T ),
 		cards: __( 'Cards / services', T ),
 		cta: __( 'Call to action', T ),
 		faq: __( 'FAQ', T ),
@@ -158,7 +160,7 @@
 			[ __( 'Native Elementor engine and Generated Pages', T ), __( 'Available', T ), boot.urls.pages ],
 			[ __( 'HTML to Elementor', T ), __( 'Available', T ), boot.urls.html ],
 			[ __( 'Image to Design', T ), __( 'Available', T ), boot.urls.image ],
-			[ __( 'AI Page Generator, images and internal links', T ), __( 'Planned: phase 6', T ) ],
+			[ __( 'AI Page Generator, section images and internal links', T ), __( 'Available', T ), boot.urls.generate ],
 			[ __( 'Consistency, accessibility, preview, revisions, design library', T ), __( 'Planned: phase 7', T ) ],
 		];
 		return el(
@@ -1476,6 +1478,395 @@
 		);
 	}
 
+	/* ---------------------------------------------------------------------- AI Page Generator */
+
+	const LAYOUT_CHANGES = {
+		columns_1: __( 'One column', T ),
+		columns_2: __( 'Two columns', T ),
+		columns_3: __( 'Three columns', T ),
+		columns_4: __( 'Four columns', T ),
+		columns_5: __( 'Five columns', T ),
+		columns_6: __( 'Six columns', T ),
+		long_cards_fewer_columns: __( 'Long card text: fewer columns so it stays readable', T ),
+		split_to_grid: __( 'Side-by-side layout changed to a grid (it did not have exactly two parts)', T ),
+		faq_single_column: __( 'FAQ shown in one column', T ),
+		stack_without_groups: __( 'Single column (no cards)', T ),
+		extra_button_removed: __( 'More than two buttons: extra buttons removed', T ),
+		long_heading_smaller: __( 'Long main heading: smaller font size', T ),
+		h1_added: __( 'The first heading became the page H1', T ),
+	};
+
+	function PageGenerator() {
+		const [ profiles, setProfiles ] = useState( [] );
+		const [ form, setForm ] = useState( { topic: '', primary_keyword: '', secondary: '', audience: '', intent: '', location: '', tone: '', notes: '', length: 'medium', images: '3', cta_url: '', links: true, title: '', profile_id: '0', sections: [] } );
+		const [ projectId, setProjectId ] = useState( 0 );
+		const [ run, setRun ] = useState( 0 );
+		const [ busy, setBusy ] = useState( false );
+		const [ approved, setApproved ] = useState( {} );
+		const [ picked, setPicked ] = useState( {} );
+		const [ prompts, setPrompts ] = useState( {} );
+		const [ noticeView, setNotice ] = useNotice();
+		const state = useJob( projectId, run );
+
+		useEffect( () => {
+			apiFetch( { path: '/aiscs/v1/website/brand-profiles?page=1' } )
+				.then( ( r ) => setProfiles( r.items || [] ) )
+				.catch( () => setProfiles( [] ) );
+		}, [] );
+		const set = ( key ) => ( v ) => setForm( Object.assign( {}, form, { [ key ]: v } ) );
+		const fail = ( e ) => setNotice( { status: 'error', text: errorText( e ) } );
+		const after = () => {
+			setBusy( false );
+		};
+
+		const start = () => {
+			setBusy( true );
+			apiFetch( {
+				path: '/aiscs/v1/design/generate',
+				method: 'POST',
+				data: {
+					topic: form.topic,
+					primary_keyword: form.primary_keyword,
+					secondary_keywords: form.secondary.split( ',' ).map( ( s ) => s.trim() ).filter( Boolean ),
+					audience: form.audience,
+					intent: form.intent,
+					location: form.location,
+					tone: form.tone,
+					notes: form.notes,
+					length: form.length,
+					sections: form.sections,
+					images: parseInt( form.images, 10 ) || 0,
+					cta_url: form.cta_url.trim(),
+					links: form.links,
+					title: form.title,
+					profile_id: parseInt( form.profile_id, 10 ) || 0,
+				},
+			} )
+				.then( ( r ) => {
+					setProjectId( r.project_id );
+					setApproved( {} );
+					setRun( run + 1 );
+					setNotice( null );
+				} )
+				.catch( fail )
+				.finally( after );
+		};
+		const build = () => {
+			setBusy( true );
+			apiFetch( {
+				path: '/aiscs/v1/design/generate/' + projectId + '/build',
+				method: 'POST',
+				data: { approved_links: Object.keys( approved ).filter( ( k ) => approved[ k ] ) },
+			} )
+				.then( () => setRun( run + 1 ) )
+				.catch( fail )
+				.finally( after );
+		};
+		const makeImages = ( ids ) => {
+			const data = { slots: ids, prompts: {} };
+			ids.forEach( ( id ) => {
+				if ( prompts[ id ] !== undefined ) {
+					data.prompts[ id ] = prompts[ id ];
+				}
+			} );
+			setBusy( true );
+			apiFetch( { path: '/aiscs/v1/design/generate/' + projectId + '/images', method: 'POST', data } )
+				.then( () => {
+					setPicked( {} );
+					setRun( run + 1 );
+				} )
+				.catch( fail )
+				.finally( after );
+		};
+		const applyImages = ( ids ) => {
+			setBusy( true );
+			apiFetch( { path: '/aiscs/v1/design/generate/' + projectId + '/images/apply', method: 'POST', data: { slots: ids } } )
+				.then( ( r ) => {
+					setNotice(
+						r.missing && r.missing.length
+							? { status: 'warning', text: sprintf( __( '%1$d image(s) placed in the draft. %2$d could not be placed because the placeholder was removed or replaced in Elementor.', T ), r.applied.length, r.missing.length ) }
+							: { status: 'success', text: sprintf( __( '%d image(s) placed in the draft.', T ), r.applied.length ) }
+					);
+					setRun( run + 1 );
+				} )
+				.catch( fail )
+				.finally( after );
+		};
+		const discard = ( id ) => {
+			setBusy( true );
+			apiFetch( { path: '/aiscs/v1/design/generate/' + projectId + '/images/' + id + '/discard', method: 'POST' } )
+				.then( () => setRun( run + 1 ) )
+				.catch( fail )
+				.finally( after );
+		};
+		const reset = () => {
+			setProjectId( 0 );
+			setPrompts( {} );
+			setPicked( {} );
+		};
+
+		const job = state && state.job ? state.job : null;
+		const running = job && ( 'queued' === job.status || 'running' === job.status );
+		const design = state && state.design;
+		const gen = state && state.generator;
+		const result = state && state.result;
+
+		const sectionChoices = [ 'hero', 'features', 'cards', 'about', 'faq', 'cta', 'contact', 'content' ];
+		const toggleSection = ( type, on ) => setForm( Object.assign( {}, form, { sections: on ? form.sections.concat( [ type ] ) : form.sections.filter( ( s ) => s !== type ) } ) );
+
+		const briefForm = el(
+			Fragment,
+			null,
+			el( 'p', { className: 'description' }, __( 'Describe the page; the AI writes the copy, plans the sections and suggests images and internal links. You review everything before a draft is created, and the draft is built from native, editable Elementor widgets. Nothing is published.', T ) ),
+			el(
+				'div',
+				{ className: 'aiscs-studio__fields' },
+				el( TextControl, { label: __( 'Page topic (required)', T ), value: form.topic, onChange: set( 'topic' ), __nextHasNoMarginBottom: true } ),
+				el( TextControl, { label: __( 'Primary keyword (required)', T ), value: form.primary_keyword, onChange: set( 'primary_keyword' ), __nextHasNoMarginBottom: true } ),
+				el( TextControl, { label: __( 'Secondary keywords (comma separated)', T ), value: form.secondary, onChange: set( 'secondary' ), __nextHasNoMarginBottom: true } ),
+				el( SelectControl, {
+					label: __( 'Search intent', T ),
+					value: form.intent,
+					options: [
+						{ label: __( 'Not specified', T ), value: '' },
+						{ label: __( 'Informational', T ), value: 'informational' },
+						{ label: __( 'Commercial', T ), value: 'commercial' },
+						{ label: __( 'Transactional', T ), value: 'transactional' },
+						{ label: __( 'Local', T ), value: 'local' },
+					],
+					onChange: set( 'intent' ),
+					__nextHasNoMarginBottom: true,
+				} ),
+				el( TextControl, { label: __( 'Target audience', T ), value: form.audience, onChange: set( 'audience' ), __nextHasNoMarginBottom: true } ),
+				el( TextControl, { label: __( 'Target location', T ), value: form.location, onChange: set( 'location' ), __nextHasNoMarginBottom: true } ),
+				el( TextControl, { label: __( 'Tone', T ), value: form.tone, onChange: set( 'tone' ), __nextHasNoMarginBottom: true } ),
+				el( SelectControl, {
+					label: __( 'Length', T ),
+					value: form.length,
+					options: [
+						{ label: __( 'Short (about 4 sections)', T ), value: 'short' },
+						{ label: __( 'Medium (about 6 sections)', T ), value: 'medium' },
+						{ label: __( 'Long (about 8 sections)', T ), value: 'long' },
+					],
+					onChange: set( 'length' ),
+					__nextHasNoMarginBottom: true,
+				} ),
+				el( SelectControl, {
+					label: __( 'Images', T ),
+					value: form.images,
+					options: [ '0', '1', '2', '3', '4', '5', '6', '8' ].map( ( n ) => ( { label: '0' === n ? __( 'No images', T ) : sprintf( __( 'Up to %s', T ), n ), value: n } ) ),
+					onChange: set( 'images' ),
+					__nextHasNoMarginBottom: true,
+				} ),
+				el( TextControl, { label: __( 'Button link (optional: /contact/, #form or https://…)', T ), value: form.cta_url, onChange: set( 'cta_url' ), __nextHasNoMarginBottom: true } ),
+				el( TextControl, { label: __( 'Page title (optional)', T ), value: form.title, onChange: set( 'title' ), __nextHasNoMarginBottom: true } ),
+				el( SelectControl, {
+					label: __( 'Styles', T ),
+					value: form.profile_id,
+					options: [ { label: __( 'Elementor site colours', T ), value: '0' } ].concat( profiles.map( ( p ) => ( { label: sprintf( __( 'Brand profile: %s', T ), p.name ), value: String( p.id ) } ) ) ),
+					onChange: set( 'profile_id' ),
+					__nextHasNoMarginBottom: true,
+				} )
+			),
+			el( 'p', null, el( 'strong', null, __( 'Sections (optional; leave empty to let the AI choose)', T ) ) ),
+			el( 'div', { className: 'aiscs-studio__checks' }, sectionChoices.map( ( type ) => el( CheckboxControl, { key: type, label: SECTION_LABELS[ type ] || type, checked: form.sections.includes( type ), onChange: ( on ) => toggleSection( type, on ), __nextHasNoMarginBottom: true } ) ) ),
+			el( wp.components.TextareaControl, { label: __( 'Facts and notes for the AI: services, prices, guarantees, real testimonials… The AI uses only these facts and never invents others.', T ), value: form.notes, onChange: set( 'notes' ), rows: 4 } ),
+			el( CheckboxControl, { label: __( 'Suggest internal links to my published pages (you approve each one)', T ), checked: form.links, onChange: set( 'links' ), __nextHasNoMarginBottom: true } ),
+			el( 'p', { className: 'description' }, __( 'One request to your default text provider, counted in Usage and Costs. AI images are only generated later, when you ask for them.', T ) ),
+			el( 'div', { className: 'aiscs-studio__actions' }, el( Button, { variant: 'primary', isBusy: busy, disabled: busy || ! form.topic.trim() || ! form.primary_keyword.trim(), onClick: start }, __( 'Generate page', T ) ) )
+		);
+
+		const steps = running
+			? el(
+					'div',
+					{ className: 'aiscs-studio__card' },
+					el( 'h2', null, __( 'Working…', T ) ),
+					el( 'ol', { className: 'aiscs-studio__steps' }, ( job.steps || [] ).map( ( s, i ) => el( 'li', { key: s.id, className: i < job.step_index ? 'is-done' : i === job.step_index ? 'is-current' : '' }, s.label, i === job.step_index ? el( Spinner ) : null ) ) ),
+					el( 'p', { className: 'description' }, job.message )
+			  )
+			: null;
+
+		const elementSummary = ( e ) => {
+			if ( 'group' === e.type ) {
+				return __( 'card', T ) + ' (' + e.elements.map( elementSummary ).join( ', ' ) + ')';
+			}
+			if ( 'heading' === e.type || 'button' === e.type ) {
+				return e.type + ': “' + e.text.slice( 0, 60 ) + '”';
+			}
+			if ( 'image' === e.type ) {
+				return __( 'image', T ) + ( e.alt ? ': ' + e.alt.slice( 0, 50 ) : '' );
+			}
+			return e.type;
+		};
+
+		const review =
+			design && gen && ! result
+				? el(
+						'div',
+						{ className: 'aiscs-studio__result' },
+						el( 'h2', null, __( 'Review the generated page', T ) ),
+						el( 'p', { className: 'description' }, sprintf( __( 'Written by %1$s (%2$s). Nothing has been saved to your pages yet.', T ), design.provider, design.model ) ),
+						gen.facts.numbers.length || gen.facts.placeholders.length || gen.report.assumptions.length
+							? el(
+									Notice,
+									{ status: 'warning', isDismissible: false },
+									el( 'strong', null, __( 'Check these facts before publishing', T ) ),
+									el(
+										'ul',
+										{ className: 'aiscs-studio__list-plain' },
+										gen.facts.numbers.map( ( f, i ) => el( 'li', { key: 'n' + i }, sprintf( __( 'Section %1$d: “%2$s” (contains a number)', T ), f.section + 1, f.text ) ) ),
+										gen.facts.placeholders.map( ( f, i ) => el( 'li', { key: 'p' + i }, sprintf( __( 'Section %1$d: fill in %2$s', T ), f.section + 1, f.text ) ) ),
+										gen.report.assumptions.map( ( a, i ) => el( 'li', { key: 'a' + i }, a ) )
+									)
+							  )
+							: null,
+						el(
+							'table',
+							{ className: 'widefat striped aiscs-tokens__table' },
+							el(
+								'tbody',
+								null,
+								el( 'tr', null, el( 'th', null, __( 'Page title', T ) ), el( 'td', null, design.document.page.title ) ),
+								el( 'tr', null, el( 'th', null, __( 'SEO title', T ) ), el( 'td', null, gen.seo.meta_title, ' ', el( 'small', null, '(' + gen.seo.meta_title.length + ')' ) ) ),
+								el( 'tr', null, el( 'th', null, __( 'Meta description', T ) ), el( 'td', null, gen.seo.meta_description, ' ', el( 'small', null, '(' + gen.seo.meta_description.length + ')' ) ) ),
+								el( 'tr', null, el( 'th', null, __( 'Slug', T ) ), el( 'td', null, design.document.page.slug || '—' ) )
+							)
+						),
+						el( 'h3', null, __( 'Sections', T ) ),
+						el(
+							'table',
+							{ className: 'widefat striped' },
+							el( 'thead', null, el( 'tr', null, el( 'th', null, '#' ), el( 'th', null, __( 'Section', T ) ), el( 'th', null, __( 'Layout (desktop/tablet/mobile)', T ) ), el( 'th', null, __( 'Content', T ) ) ) ),
+							el(
+								'tbody',
+								null,
+								design.document.sections.map( ( s, i ) =>
+									el(
+										'tr',
+										{ key: s.id },
+										el( 'td', null, i + 1 ),
+										el( 'td', null, SECTION_LABELS[ s.type ] || s.type ),
+										el( 'td', null, s.layout.kind + ' ' + s.layout.columns.desktop + '/' + s.layout.columns.tablet + '/' + s.layout.columns.mobile ),
+										el( 'td', null, s.elements.map( elementSummary ).join( ' · ' ) )
+									)
+								)
+							)
+						),
+						gen.report.layout_changes.length
+							? el(
+									'details',
+									{ className: 'aiscs-studio__analysis' },
+									el( 'summary', null, sprintf( __( 'Layout adjusted to the content (%d)', T ), gen.report.layout_changes.length ) ),
+									el( 'ul', { className: 'aiscs-studio__list-plain' }, gen.report.layout_changes.map( ( c, i ) => el( 'li', { key: i }, sprintf( __( 'Section %1$d: %2$s', T ), c.section + 1, LAYOUT_CHANGES[ c.change ] || c.change ) ) ) )
+							  )
+							: null,
+						el( 'h3', null, __( 'Internal link suggestions', T ) ),
+						gen.links.length
+							? el(
+									Fragment,
+									null,
+									el( 'p', { className: 'description' }, __( 'Only the links you tick are added. Each target is checked again when the draft is created.', T ) ),
+									gen.links.map( ( l ) =>
+										el( CheckboxControl, {
+											key: l.id,
+											checked: !! approved[ l.id ],
+											onChange: ( on ) => setApproved( Object.assign( {}, approved, { [ l.id ]: on } ) ),
+											label: sprintf( __( '“%1$s” → %2$s (section %3$d)', T ), l.anchor, l.title, l.section + 1 ) + ( l.reason ? ' — ' + l.reason : '' ),
+											__nextHasNoMarginBottom: true,
+										} )
+									)
+							  )
+							: el( 'p', { className: 'description' }, __( 'No suitable internal links were suggested.', T ) ),
+						el( 'h3', null, __( 'Images', T ) ),
+						gen.images.length
+							? el(
+									Fragment,
+									null,
+									el( 'p', { className: 'description' }, __( 'The draft gets placeholder images first. After it is created you can generate AI images from these prompts, review them and choose which ones to use.', T ) ),
+									el( 'ul', { className: 'aiscs-studio__list-plain' }, gen.images.map( ( img ) => el( 'li', { key: img.id }, el( 'strong', null, img.alt || img.id ), ' (' + img.aspect + ', ' + ( SECTION_LABELS[ img.section_type ] || img.section_type ) + '): ' + img.prompt ) ) )
+							  )
+							: el( 'p', { className: 'description' }, __( 'No images.', T ) ),
+						el(
+							'div',
+							{ className: 'aiscs-studio__actions' },
+							el( Button, { variant: 'primary', isBusy: busy, disabled: busy || running, onClick: build }, __( 'Create Elementor draft', T ) ),
+							el( Button, { variant: 'secondary', disabled: busy || running, onClick: start }, __( 'Generate again', T ) ),
+							el( Button, { variant: 'tertiary', onClick: reset }, __( 'Change the brief', T ) )
+						)
+				  )
+				: null;
+
+		const slots = state && state.images ? state.images.slots : [];
+		const canGenerate = state && state.images && state.images.can_generate;
+		const chosenIds = Object.keys( picked ).filter( ( k ) => picked[ k ] );
+		const imageReview =
+			result && slots.length
+				? el(
+						'div',
+						{ className: 'aiscs-studio__result' },
+						el( 'h2', null, __( 'Section images', T ) ),
+						canGenerate ? null : el( Notice, { status: 'warning', isDismissible: false }, __( 'To generate AI images, choose a default image provider under AI Providers (and make sure you may upload files). You can also replace the placeholders in Elementor with your own images.', T ) ),
+						el( 'p', { className: 'description' }, __( 'Each image is generated as a suggestion in the Media Library. It is only put into the draft when you click “Use this image”.', T ) ),
+						el(
+							'div',
+							{ className: 'aiscs-studio__images' },
+							slots.map( ( s ) =>
+								el(
+									'div',
+									{ key: s.id, className: 'aiscs-studio__card' },
+									el( CheckboxControl, { label: el( 'strong', null, s.alt || s.id ), checked: !! picked[ s.id ], disabled: ! canGenerate, onChange: ( on ) => setPicked( Object.assign( {}, picked, { [ s.id ]: on } ) ), __nextHasNoMarginBottom: true } ),
+									el( 'p', { className: 'description' }, sprintf( __( 'Section %1$d · %2$s · %3$s', T ), s.section + 1, s.aspect, 'applied' === s.status ? __( 'AI image in the draft', T ) : __( 'placeholder in the draft', T ) ) ),
+									el( wp.components.TextareaControl, { label: __( 'Prompt', T ), value: prompts[ s.id ] !== undefined ? prompts[ s.id ] : s.prompt, onChange: ( v ) => setPrompts( Object.assign( {}, prompts, { [ s.id ]: v } ) ), rows: 3 } ),
+									s.error ? el( Notice, { status: 'error', isDismissible: false }, s.error ) : null,
+									s.candidate
+										? el(
+												Fragment,
+												null,
+												el( 'img', { src: s.candidate.url, alt: s.alt, className: 'aiscs-studio__candidate' } ),
+												el( 'p', { className: 'description' }, sprintf( __( 'Made by %1$s (%2$s).', T ), s.candidate.provider, s.candidate.model ) ),
+												el(
+													'div',
+													{ className: 'aiscs-studio__actions' },
+													el( Button, { variant: 'primary', disabled: busy || running, onClick: () => applyImages( [ s.id ] ) }, __( 'Use this image', T ) ),
+													el( Button, { variant: 'tertiary', isDestructive: true, disabled: busy || running, onClick: () => discard( s.id ) }, __( 'Discard', T ) )
+												)
+										  )
+										: null
+								)
+							)
+						),
+						el(
+							'div',
+							{ className: 'aiscs-studio__actions' },
+							el( Button, { variant: 'secondary', isBusy: busy, disabled: busy || running || ! canGenerate || ! chosenIds.length, onClick: () => makeImages( chosenIds ) }, sprintf( __( 'Generate %d selected image(s)', T ), chosenIds.length ) ),
+							el( 'span', { className: 'description' }, __( 'One image request per image, counted in Usage and Costs.', T ) )
+						)
+				  )
+				: null;
+
+		return el(
+			Fragment,
+			null,
+			noticeView,
+			! projectId ? briefForm : null,
+			state && state.error ? el( Notice, { status: 'error', isDismissible: false }, state.error ) : null,
+			job && ( 'failed' === job.status || 'cancelled' === job.status ) ? el( Fragment, null, el( Notice, { status: 'error', isDismissible: false }, job.message || job.error ), result ? null : el( Button, { variant: 'secondary', onClick: reset }, __( 'Start over', T ) ) ) : null,
+			steps,
+			result
+				? el(
+						Fragment,
+						null,
+						el( DraftResult, { result } ),
+						result.report && result.report.links_applied && result.report.links_applied.length ? el( 'p', { className: 'description' }, sprintf( __( '%d internal link(s) added.', T ), result.report.links_applied.length ) ) : null,
+						result.report && result.report.links_skipped && result.report.links_skipped.length ? el( Notice, { status: 'warning', isDismissible: false }, sprintf( __( '%d approved link(s) were not added because the target page is no longer published or the anchor text was not found.', T ), result.report.links_skipped.length ) ) : null
+				  )
+				: null,
+			imageReview,
+			review,
+			result ? el( Button, { variant: 'secondary', onClick: reset }, __( 'Generate another page', T ) ) : null
+		);
+	}
+
 	/* ---------------------------------------------------------------------- Mount */
 
 	const VIEWS = {
@@ -1486,6 +1877,7 @@
 		pages: [ __( 'Generated Pages', T ), GeneratedPages ],
 		html: [ __( 'HTML to Elementor', T ), HtmlToElementor ],
 		image: [ __( 'Image to Design', T ), ImageToDesign ],
+		generate: [ __( 'AI Page Generator', T ), PageGenerator ],
 	};
 
 	function App( { view } ) {

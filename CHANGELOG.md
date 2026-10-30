@@ -2,6 +2,43 @@
 
 All notable changes to AI SEO Content Studio. Versions follow semantic versioning.
 
+## 1.9.0-beta.3 — 2026-10-30 — AI Website Studio, phase 6: AI page generator
+
+Added
+- **AI Page Generator** screen (AI Website Studio → AI Page Generator):
+  - Brief: topic, primary and secondary keywords, intent, audience, location, tone, length (short/medium/long), optional section types, number of images (0–8), button link, facts and notes, page title, styles (Elementor site colours or a brand profile).
+  - One strict-JSON request (`studio_page_generate`) returns the sections, the copy, the SEO title, meta description and slug, image alt texts and prompts, internal link suggestions and the assumptions the model had to make.
+  - Review before anything is saved: SEO fields with lengths, sections with their layout per device, the layout adjustments, a **fact check** (sentences with numbers, `[placeholders]` to fill in, assumptions), link suggestions to approve one by one, and the image prompts.
+- **Content-to-design mapping** (`ContentLayoutMapper`): the layout follows what was written.
+  - Columns by card count: 2 → 2, 3 → 3, 4 → 4, 5–6 → 3, 8 → 4.
+  - Long card text (over 55 words on average) → at most 2 columns.
+  - Tablet: 1 column for three cards, else 2; mobile: always 1.
+  - Split layouts need exactly two parts; FAQs are single-column; at most two buttons per section.
+  - Long H1s get a smaller font size; exactly one H1 per page.
+  - Every change is listed in the review.
+- **Brand consistency**: the model never chooses colours. Sections use background roles (page, surface, primary, secondary, dark), mapped to the chosen brand profile, or else to the Elementor kit's global colours (with a derived light surface tint), or else to neutral defaults. Cards follow the section background.
+- **Internal links**:
+  - Candidates are the site's published, public, password-free pages and posts. The model sees their IDs and titles only.
+  - A suggestion is kept only when its target exists and its anchor (1–8 words) really appears in a text element of the named section. At most 8 suggestions, one per target page.
+  - Only approved links are inserted, by wrapping the first unlinked, whole-word occurrence of the anchor. The target is checked again (still published) when the draft is built.
+- **Section images with approval**:
+  - The draft is created with placeholder images in each image slot, attached to the draft so no clean-up deletes them.
+  - "Generate selected images" makes one AI image per chosen slot from its (editable) prompt, using the default image provider. Each image is imported into the Media Library as a *suggestion*; the draft does not change.
+  - "Use this image" replaces the placeholder in the draft's current Elementor data, so edits made in Elementor are kept. The placeholder is then deleted. "Discard" deletes a suggestion; regenerating replaces an unapproved suggestion.
+- **Background jobs** `studio_generate`, `studio_generate_build` and `studio_page_images`. Every step stores its result first, so a retry never repeats a billed request, imports an image twice or creates a second draft. The layout is validated against the PageDocument schema before the review.
+- **REST**:
+  - `POST /design/generate`
+  - `POST /design/generate/{id}/build`
+  - `POST /design/generate/{id}/images`
+  - `POST /design/generate/{id}/images/apply`
+  - `POST /design/generate/{id}/images/{slot}/discard`
+
+  `GET /design/jobs/{id}` returns the generator review and the image slots.
+
+Changed
+- The vision layout request and the page generator request may use up to 32,000 output tokens (only a limit; unused tokens are not billed), so long pages are not cut off when the per-request setting is low.
+- `VisionDesign::leaves()` is shared with the generator: it supports multi-paragraph text and keeps image prompts.
+
 ## 1.9.0-beta.2 — 2026-10-30 — AI Website Studio, phase 5: screenshot to design
 
 Added

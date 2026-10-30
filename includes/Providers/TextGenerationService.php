@@ -30,7 +30,7 @@ defined( 'ABSPATH' ) || exit;
 class TextGenerationService {
 
 	/** Purposes that return a whole article and may exceed the "max output tokens" setting. */
-	private const WHOLE_DOCUMENT_PURPOSES = array( 'content_article', 'content_chat', 'content_edit', 'optimize_rewrite' );
+	private const WHOLE_DOCUMENT_PURPOSES = array( 'content_article', 'content_chat', 'content_edit', 'optimize_rewrite', 'studio_page_generate', 'studio_vision_layout' );
 
 	/** Output ceiling for those purposes (only a limit: unused tokens are not billed). */
 	private const WHOLE_DOCUMENT_MAX_OUTPUT = 32000;

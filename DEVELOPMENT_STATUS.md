@@ -1,6 +1,6 @@
 # Development status — AI Website Studio
 
-Last updated: 2026-10-30. Plugin version **1.9.0-beta.2** (DB version 7). Target for the full studio: 1.9.0.
+Last updated: 2026-10-30. Plugin version **1.9.0-beta.3** (DB version 7). Target for the full studio: 1.9.0.
 
 ## Summary
 
@@ -28,7 +28,12 @@ Last updated: 2026-10-30. Plugin version **1.9.0-beta.2** (DB version 7). Target
 | 5 | Screenshot validation, tiling and temporary store | ✅ Implemented |
 | 5 | VisionDesign (Output A: structure; Output B: slots and content) | ✅ Implemented |
 | 5 | Screenshot jobs, REST `/design/image/*`, Image to Design screen with review | ✅ Implemented |
-| 6 | AI page generator from a brief, section images, internal links | ⏳ Not started (it should output a PageDocument and reuse PageBuilder) |
+| 6 | PageGenerator (brief → strict JSON → PageDocument, SEO fields, image prompts) | ✅ Implemented (1.9.0-beta.3) |
+| 6 | ContentLayoutMapper (content-to-design rules) and fact check | ✅ Implemented |
+| 6 | InternalLinks (validated suggestions, approval, insertion) | ✅ Implemented |
+| 6 | Section images (placeholders → AI candidates → approval into the live draft) | ✅ Implemented |
+| 6 | Brand consistency (role backgrounds → brand profile / Elementor kit colours) | ✅ Implemented |
+| 6 | Generator jobs, REST `/design/generate/*`, AI Page Generator screen | ✅ Implemented |
 | 7 | Consistency, accessibility, section regeneration, preview, revisions, design library | ⏳ Not started (section maps are stored for regeneration; `DraftManager::update()` and `ElementorMapper::mapSection()` exist) |
 | 8 | Live WP/Elementor QA matrix, 1.9.0 packaging | ⏳ Not started |
 
@@ -41,9 +46,25 @@ Last updated: 2026-10-30. Plugin version **1.9.0-beta.2** (DB version 7). Target
 | A: Existing page cloning (select → analyze → topic → SEO content → duplicate → replace → draft → open in Elementor) | Code complete; needs a live run (TESTING.md 13–15) |
 | B: HTML → Elementor (paste → parse → native widgets → validate → preview → draft → edit) | Code complete; needs a live run (TESTING.md 18–20) |
 | C: Screenshot → Elementor (upload → analyse → brand and layout → content → placeholder images → layout → draft) | Code complete; needs a live run with real providers (TESTING.md 21–24) |
-| D: Brand consistency | Profiles done; checker in phase 7 |
+| G: AI page from a brief (brief → review with fact check → approved links → draft → approved AI images) | Code complete; needs a live run with real providers (TESTING.md 25–29) |
+| D: Brand consistency | Profiles and generator colour roles done; checker in phase 7 |
 | E: Section regeneration | Phase 7 (foundations exist) |
 | F: Design library | Phase 7 |
+
+## Files changed in 1.9.0-beta.3
+
+New:
+- `includes/WebsiteStudio/Generator/`: `PageGenerator`, `ContentLayoutMapper`, `InternalLinks`, `SiteGateway`, `GeneratorJob`, `GeneratedImages`
+- `tests/unit/GeneratorTest.php`
+
+Changed:
+- `WebsiteStudio/Vision/VisionDesign.php` (`leaves()` shared: paragraphs, image prompts)
+- `Providers/TextGenerationService.php` (output ceiling for the generator and vision requests)
+- `Core/Plugin.php`
+- `REST/WebsiteDesignController.php`
+- `Admin/WebsiteStudioPage.php`
+- `assets/website-studio/*`
+- version files, docs
 
 ## Files changed in 1.9.0-beta.2
 
@@ -92,10 +113,18 @@ Changed:
 
 - `php -l` on every PHP file: no syntax errors (PHP 8.3).
 - `node --check assets/website-studio/studio.js`: OK.
-- `php tests/run.php`: **70 passed, 0 failed**.
+- `php tests/run.php`: **77 passed, 0 failed**.
+- AI Page Generator screen rendered in Chromium (React 18, stubbed WordPress components and REST): brief → review → approve a link → draft → image review; no console errors, and the REST bodies sent are the ones the endpoints expect.
 - Converter benchmark: a page with about 2,000 elements and 1,500 CSS rules converts in 0.12 s (12 MB peak).
 
 ## Known limitations
+
+- **AI Page Generator (phase 6).**
+  - Copy quality and fact discipline depend on the model; the prompt forbids invented facts and the review lists numbers and placeholders, but the user must check them before publishing.
+  - Image prompts are generated in the page's language and passed to the image provider unchanged.
+  - Regenerating an image that was already approved keeps the earlier approved image in the Media Library (attached to the draft).
+  - Images used as section backgrounds are not generated; only image widgets are.
+  - The stored design record (`aiscs_generated_pages.document`) is the version at creation; image approvals change the Elementor data only.
 
 - **Screenshot to design (phase 5)** is a visual approximation.
   - Layout quality depends on the vision model, and fonts are guessed (or left to the theme).

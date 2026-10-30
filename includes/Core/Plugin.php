@@ -69,6 +69,9 @@ use AiSeoContentStudio\WebsiteStudio\Persistence\AuditLog;
 use AiSeoContentStudio\WebsiteStudio\Persistence\BrandProfileRepository;
 use AiSeoContentStudio\WebsiteStudio\Cloner\CloneJob;
 use AiSeoContentStudio\WebsiteStudio\StudioServices;
+use AiSeoContentStudio\WebsiteStudio\Generator\GeneratedImages;
+use AiSeoContentStudio\WebsiteStudio\Generator\GeneratorJob;
+use AiSeoContentStudio\WebsiteStudio\Generator\SiteGateway;
 use AiSeoContentStudio\WebsiteStudio\Vision\ScreenshotJob;
 use AiSeoContentStudio\WebsiteStudio\Vision\ScreenshotStore;
 
@@ -293,6 +296,9 @@ final class Plugin {
 		foreach ( array( ScreenshotJob::TYPE_ANALYZE, ScreenshotJob::TYPE_BUILD ) as $screenshot_type ) {
 			$this->handlers[ $screenshot_type ] = new ScreenshotJob( $screenshot_type, $this->projects, $this->text, $this->settings, $this->studio, $this->media, new ScreenshotStore(), new BrandProfileRepository() );
 		}
+		foreach ( array( GeneratorJob::TYPE_WRITE, GeneratorJob::TYPE_BUILD, GeneratorJob::TYPE_IMAGES ) as $generator_type ) {
+			$this->handlers[ $generator_type ] = new GeneratorJob( $generator_type, $this->projects, $this->text, $this->images, $this->settings, $this->studio, $this->media, new SiteGateway(), new BrandProfileRepository() );
+		}
 		// The job lock must outlive the slowest request a step can make (all retries included).
 		$job_ttl         = (int) $this->settings->get( 'ai.request_timeout' ) * ( 1 + (int) $this->settings->get( 'ai.max_retries' ) ) + 180;
 		$this->jobs      = new JobRunner( $this->projects, array_values( $this->handlers ), $this->logger, null, $job_ttl );
@@ -418,6 +424,7 @@ final class Plugin {
 			new BrandProfileRepository(),
 			new AuditLog()
 		) )->register();
-		( new WebsiteDesignController( $this->studio, $this->projects, $this->jobs, new BrandProfileRepository(), $this->settings ) )->register();
+		$site = new SiteGateway();
+		( new WebsiteDesignController( $this->studio, $this->projects, $this->jobs, new BrandProfileRepository(), $this->settings, $this->images, new GeneratedImages( $this->projects, $this->studio, $site, $this->media ), $site ) )->register();
 	}
 }

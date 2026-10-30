@@ -49,6 +49,7 @@ class WebsiteStudioPage {
 	public function views(): array {
 		return array(
 			'dashboard' => __( 'Dashboard', 'ai-seo-content-studio' ),
+			'generate'  => __( 'AI Page Generator', 'ai-seo-content-studio' ),
 			'brand'     => __( 'Website Brand Analyzer', 'ai-seo-content-studio' ),
 			'profiles'  => __( 'Brand Profiles', 'ai-seo-content-studio' ),
 			'clone'     => __( 'Clone Existing Page', 'ai-seo-content-studio' ),

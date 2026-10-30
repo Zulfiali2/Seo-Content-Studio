@@ -15,7 +15,7 @@ trap 'rm -rf -- "$stage"' EXIT
 mkdir "$stage/$slug"
 ( cd "$root" && tar cf - \
 	--exclude='./.git' --exclude='./dist' --exclude='./tests' --exclude='./bin' \
-	--exclude='./node_modules' --exclude='./src' --exclude='./DEVELOPMENT_STATUS.md' \
+	--exclude='./node_modules' --exclude='./.gitignore' --exclude='./src' --exclude='./DEVELOPMENT_STATUS.md' \
 	--exclude='*.log' --exclude='.DS_Store' . ) | ( cd "$stage/$slug" && tar xf - )
 
 zip_path="$out/$slug-$version.zip"

@@ -271,3 +271,72 @@ Owner only. Body:
 - `placeholders` (boolean, default true; needs `upload_files` and GD).
 
 Starts the build job (write → images → build) and returns 202. The draft's `generation_type` is `screenshot`. Returns 409 when the project has not been analysed or a draft was already made from it.
+
+
+---
+
+# Phase 6: AI Page Generator (1.9.0-beta.3)
+
+## POST /design/generate
+
+Needs `aiscs_generate_content` and active Elementor.
+
+Body:
+- **Brief.**
+  - Required: `topic` (≤300) and `primary_keyword` (≤120).
+  - Optional: `secondary_keywords` (≤15), `audience`, `intent` (`informational|commercial|transactional|local`), `location`, `tone`, `notes` (≤3000).
+- **Options.**
+  - `length`: `short|medium|long`.
+  - `sections`: section types, ≤12.
+  - `images`: 0–8, default 3.
+  - `cta_url`: http(s), `/path` or `#anchor`; otherwise 400.
+  - `links`: boolean, default true.
+  - `title`.
+  - `profile_id`: must be the user's own.
+
+Creates a studio project, reads the link candidates as the current user, and starts `studio_generate`. Returns 202 `{ project_id, job }`. Nothing is written to pages.
+
+## GET /design/jobs/{project_id}
+
+When `source` is `generator`, the response also has:
+
+```json
+{ "design": { "document": "PageDocument (image slots as {type: image, aspect, alt, prompt})", "report": {}, "provider": "", "model": "" },
+  "generator": {
+    "seo":   { "meta_title": "", "meta_description": "", "keyword": "" },
+    "links": [ { "id": "link-1", "target_id": 12, "title": "", "url": "", "anchor": "", "section": 1, "reason": "" } ],
+    "facts": { "numbers": [ { "section": 1, "text": "" } ], "placeholders": [ { "section": 2, "text": "[Add your phone number]" } ] },
+    "images": [ { "id": "img-1", "section": 0, "section_type": "hero", "aspect": "3:2", "alt": "", "prompt": "" } ],
+    "report": { "assumptions": [], "layout_changes": [ { "section": 1, "change": "columns_4" } ], "images_removed": 0, "icons_replaced": 0, "dropped": 0 } },
+  "images": { "slots": [ { "id": "img-1", "...": "as above", "placeholder_id": 501, "current_id": 501,
+                           "status": "placeholder|candidate|applied", "candidate": null, "error": "" } ],
+              "can_generate": true } }
+```
+
+## POST /design/generate/{project_id}/build
+
+Owner only. Body: `approved_links` (IDs from `generator.links`; unknown IDs are ignored) and `title`.
+
+Starts `studio_generate_build` (images → build) and returns 202. The draft's `generation_type` is `generated`. The result has `report.links_applied`, `report.links_skipped` and `seo`.
+
+Returns 409 before the design exists or after a draft was made.
+
+## POST /design/generate/{project_id}/images
+
+Owner only, plus `upload_files` and a default image provider (424 otherwise).
+
+Body:
+- `slots`: `img-N`, 1–8.
+- `prompts`: `{ "img-1": "..." }`, ≤1500 characters each.
+
+Starts `studio_page_images`: one image request per slot. Results are kept as `candidate` and are not put into the page.
+
+## POST /design/generate/{project_id}/images/apply
+
+Owner only. Body: `slots`.
+
+Replaces each slot's current image with its candidate in the draft's current Elementor data. The update is validated in `cloned` mode, because the user may have added any widget since. Returns `{ applied, missing, images }`; `missing` means the image was removed or replaced in Elementor.
+
+## POST /design/generate/{project_id}/images/{slot}/discard
+
+Deletes the slot's unapproved candidate.

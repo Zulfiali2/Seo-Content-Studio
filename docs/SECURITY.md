@@ -177,3 +177,24 @@ Report vulnerabilities privately to the plugin maintainer, not in public issues.
 
   Missing content becomes visible placeholders, never invented facts. Pages pass the DocumentValidator in `generated` mode, so no HTML widget is possible.
 - **Costs.** One vision request per screenshot, plus one optional text request for the content. Both go through TextGenerationService (limits, usage log, duplicate-request lock). Retried steps never repeat a request.
+
+## AI Website Studio — page generator, links and images (1.9.0-beta.3)
+
+- **Untrusted model output.** The answer is strict JSON. Every value passes VisionDesign/PageGenerator and then the PageDocument and HtmlFragment sanitisers before the review:
+  - text is plain (paragraphs are escaped and wrapped in `<p>`);
+  - icons come from the allow-list;
+  - colours cannot be given at all (background roles only);
+  - at most 20 sections.
+
+  The document is validated before the user sees it, and again (DocumentValidator, `generated` mode) before the draft is saved.
+- **Links.**
+  - Button URLs come only from the user's `cta_url` (http(s), a site path or `#anchor`; `javascript:`, protocol-relative and other schemes are refused). Otherwise buttons link to `#`.
+  - Internal link targets come only from the server's candidate list (published, public, password-free pages and posts). The model sees IDs and titles, and URLs are filled in by the server.
+  - The anchor is HTML-escaped and wrapped outside existing links. The target's permalink is read again when the draft is built.
+- **No invented facts.** The prompt forbids prices, statistics, awards, testimonials, contact details and the like unless the user's notes or business settings provide them. Missing facts become visible `[placeholders]`. The review lists every sentence with a number, every placeholder and the model's assumptions.
+- **Images.**
+  - Image requests need `upload_files` and a configured image provider, and go through ImageGenerationService (limits, usage log, duplicate lock) and ImageValidator.
+  - Generated images are suggestions until the user approves them.
+  - Placeholders and approved images are attached to the draft, so `MediaImporter::deleteUnused()` never removes an image a page shows.
+  - Only plugin-made images are ever deleted (rejected suggestions, replaced placeholders), and only when the user may delete them.
+- **Ownership.** Every generator route requires `aiscs_generate_content` and ownership of the studio project. Applying images also passes `DraftManager::assertWritable()` (a studio-made draft the user can edit). Nothing is published.
