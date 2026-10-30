@@ -35,6 +35,14 @@ final class StudioTables {
 	}
 
 	/**
+	 * Generated pages table.
+	 */
+	public static function pages(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'aiscs_generated_pages';
+	}
+
+	/**
 	 * Audit log table.
 	 */
 	public static function audit(): string {
@@ -48,7 +56,7 @@ final class StudioTables {
 	 * @return string[]
 	 */
 	public static function all(): array {
-		return array( self::profiles(), self::analyses(), self::audit() );
+		return array( self::profiles(), self::analyses(), self::pages(), self::audit() );
 	}
 
 	/**
@@ -61,7 +69,27 @@ final class StudioTables {
 		$profiles = self::profiles();
 		$analyses = self::analyses();
 		$audit    = self::audit();
+		$pages    = self::pages();
 		return array(
+			"CREATE TABLE {$pages} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  project_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  page_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  source_page_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  generation_type varchar(32) NOT NULL,
+  profile_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  status varchar(16) NOT NULL DEFAULT 'draft',
+  created_by bigint(20) unsigned NOT NULL DEFAULT 0,
+  section_map text NOT NULL,
+  document longtext NOT NULL,
+  notes text NOT NULL,
+  created_at datetime NOT NULL,
+  updated_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  UNIQUE KEY page_id (page_id),
+  KEY created_by (created_by,created_at),
+  KEY project_id (project_id)
+) {$charset};",
 			"CREATE TABLE {$profiles} (
   id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   owner_id bigint(20) unsigned NOT NULL DEFAULT 0,

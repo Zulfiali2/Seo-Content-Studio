@@ -21,6 +21,7 @@ class FakeWpdb {
 		$this->pdo->setAttribute( PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION );
 		$this->pdo->exec( 'CREATE TABLE wp_aiscs_brand_profiles (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INT, project_id INT, name TEXT, schema_version INT, tokens TEXT, source_pages TEXT, created_at TEXT, updated_at TEXT)' );
 		$this->pdo->exec( 'CREATE TABLE wp_aiscs_design_analyses (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INT, project_id INT DEFAULT 0, source_page_id INT, source_hash TEXT, analyzer_version INT, profile_id INT DEFAULT 0, status TEXT, analysis TEXT, created_at TEXT)' );
+		$this->pdo->exec( 'CREATE TABLE wp_aiscs_generated_pages (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INT, page_id INT UNIQUE, source_page_id INT, generation_type TEXT, profile_id INT, status TEXT, created_by INT, section_map TEXT, document TEXT, notes TEXT, created_at TEXT, updated_at TEXT)' );
 		$this->pdo->exec( 'CREATE TABLE wp_aiscs_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT, user_id INT, action TEXT, object_type TEXT, object_id INT, details TEXT)' );
 	}
 

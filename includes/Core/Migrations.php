@@ -20,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
 final class Migrations {
 
 	/** Current schema version. Bump when the schema changes. */
-	public const DB_VERSION = '6';
+	public const DB_VERSION = '7';
 
 	/** Option storing the installed schema version. */
 	public const OPTION = 'aiscs_db_version';
@@ -74,7 +74,7 @@ final class Migrations {
 
 		$previous = (string) get_option( self::OPTION, '' );
 		dbDelta( $sql );
-		// 6: AI Website Studio tables (brand profiles, design analyses, audit log).
+		// 6: AI Website Studio tables (brand profiles, design analyses, audit log); 7: generated pages.
 		foreach ( StudioTables::schema( $charset ) as $studio_sql ) {
 			dbDelta( $studio_sql );
 		}
