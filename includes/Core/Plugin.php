@@ -1,0 +1,379 @@
+<?php
+/**
+ * Composition root: builds services once and registers hooks.
+ *
+ * @package AiSeoContentStudio
+ */
+
+namespace AiSeoContentStudio\Core;
+
+use AiSeoContentStudio\Admin\AdminPage;
+use AiSeoContentStudio\Content\BriefJob;
+use AiSeoContentStudio\Content\ContentJob;
+use AiSeoContentStudio\Content\DraftWriter;
+use AiSeoContentStudio\Content\SourceVerifier;
+use AiSeoContentStudio\Content\VersionStore;
+use AiSeoContentStudio\Elementor\ElementorBridge;
+use AiSeoContentStudio\Elementor\ElementorWriter;
+use AiSeoContentStudio\Frontend\BlogShortcodes;
+use AiSeoContentStudio\Http\HttpClient;
+use AiSeoContentStudio\Jobs\JobRunner;
+use AiSeoContentStudio\Logging\Logger;
+use AiSeoContentStudio\Media\ImageJob;
+use AiSeoContentStudio\Media\MediaImporter;
+use AiSeoContentStudio\Media\StockImages;
+use AiSeoContentStudio\Media\Stock\OpenverseSource;
+use AiSeoContentStudio\Media\Stock\PexelsSource;
+use AiSeoContentStudio\Media\Stock\PixabaySource;
+use AiSeoContentStudio\Optimizer\OptimizeJobs;
+use AiSeoContentStudio\Projects\ProjectRepository;
+use AiSeoContentStudio\Providers\ImageGenerationService;
+use AiSeoContentStudio\Providers\ProviderRegistry;
+use AiSeoContentStudio\Providers\TextGenerationService;
+use AiSeoContentStudio\REST\ContentController;
+use AiSeoContentStudio\REST\ImagesController;
+use AiSeoContentStudio\REST\OptimizerController;
+use AiSeoContentStudio\REST\ProjectsController;
+use AiSeoContentStudio\REST\ProvidersController;
+use AiSeoContentStudio\REST\ResearchController;
+use AiSeoContentStudio\REST\SettingsController;
+use AiSeoContentStudio\REST\StatusController;
+use AiSeoContentStudio\REST\UsageController;
+use AiSeoContentStudio\Research\CompetitorFetcher;
+use AiSeoContentStudio\Research\CostEstimates;
+use AiSeoContentStudio\Research\DataForSEO\DataForSeoProvider;
+use AiSeoContentStudio\Research\MarketList;
+use AiSeoContentStudio\Research\ResearchCache;
+use AiSeoContentStudio\Research\ResearchGateway;
+use AiSeoContentStudio\Research\ResearchJob;
+use AiSeoContentStudio\SEO\EvaluationJob;
+use AiSeoContentStudio\SEO\DeterministicChecks;
+use AiSeoContentStudio\SEO\Evaluator;
+use AiSeoContentStudio\SEO\MetaOutput;
+use AiSeoContentStudio\Security\CredentialStore;
+use AiSeoContentStudio\Security\Encryption;
+use AiSeoContentStudio\Security\Redactor;
+use AiSeoContentStudio\Security\UrlValidator;
+use AiSeoContentStudio\Settings\SettingsRepository;
+use AiSeoContentStudio\Usage\CostEstimator;
+use AiSeoContentStudio\Usage\UsageLimiter;
+use AiSeoContentStudio\Usage\UsageRepository;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Main plugin object.
+ */
+final class Plugin {
+
+	/**
+	 * Singleton instance, created on `plugins_loaded`.
+	 *
+	 * @var Plugin|null
+	 */
+	private static ?Plugin $instance = null;
+
+	/**
+	 * Settings repository.
+	 *
+	 * @var SettingsRepository
+	 */
+	public readonly SettingsRepository $settings;
+
+	/**
+	 * Encrypted credential store.
+	 *
+	 * @var CredentialStore
+	 */
+	public readonly CredentialStore $credentials;
+
+	/**
+	 * Logger.
+	 *
+	 * @var Logger
+	 */
+	public readonly Logger $logger;
+
+	/**
+	 * HTTP client.
+	 *
+	 * @var HttpClient
+	 */
+	public readonly HttpClient $http;
+
+	/**
+	 * AI providers.
+	 *
+	 * @var ProviderRegistry
+	 */
+	public readonly ProviderRegistry $providers;
+
+	/**
+	 * Usage log.
+	 *
+	 * @var UsageRepository
+	 */
+	public readonly UsageRepository $usage;
+
+	/**
+	 * Usage limits.
+	 *
+	 * @var UsageLimiter
+	 */
+	public readonly UsageLimiter $limiter;
+
+	/**
+	 * Cost estimator.
+	 *
+	 * @var CostEstimator
+	 */
+	public readonly CostEstimator $costs;
+
+	/**
+	 * Controlled text generation entry point.
+	 *
+	 * @var TextGenerationService
+	 */
+	public readonly TextGenerationService $text;
+
+	/**
+	 * Controlled image generation entry point.
+	 *
+	 * @var ImageGenerationService
+	 */
+	public readonly ImageGenerationService $images;
+
+	/**
+	 * Media Library importer.
+	 *
+	 * @var MediaImporter
+	 */
+	private MediaImporter $media;
+
+	/**
+	 * Environment probe.
+	 *
+	 * @var Environment
+	 */
+	public readonly Environment $environment;
+
+	/**
+	 * Research gateway (cache, limits, usage).
+	 *
+	 * @var ResearchGateway
+	 */
+	public readonly ResearchGateway $research;
+
+	/**
+	 * Content projects.
+	 *
+	 * @var ProjectRepository
+	 */
+	public readonly ProjectRepository $projects;
+
+	/**
+	 * Background job runner.
+	 *
+	 * @var JobRunner
+	 */
+	public readonly JobRunner $jobs;
+
+	/**
+	 * Job handlers by type.
+	 *
+	 * @var array<string, \AiSeoContentStudio\Jobs\JobHandlerInterface>
+	 */
+	private array $handlers;
+
+	/**
+	 * Content versions.
+	 *
+	 * @var VersionStore
+	 */
+	private VersionStore $versions;
+
+	/**
+	 * SEO evaluator.
+	 *
+	 * @var Evaluator
+	 */
+	private Evaluator $evaluator;
+
+	/**
+	 * Draft writer.
+	 *
+	 * @var DraftWriter
+	 */
+	private DraftWriter $drafts;
+
+	/**
+	 * DataForSEO adapter.
+	 *
+	 * @var DataForSeoProvider
+	 */
+	private DataForSeoProvider $dataforseo;
+
+	/**
+	 * Market list.
+	 *
+	 * @var MarketList
+	 */
+	private MarketList $markets;
+
+	/**
+	 * Cost estimates.
+	 *
+	 * @var CostEstimates
+	 */
+	private CostEstimates $estimates;
+
+	/**
+	 * Build the service graph.
+	 */
+	private function __construct() {
+		$this->settings    = new SettingsRepository();
+		$redactor          = new Redactor();
+		$this->logger      = new Logger( $redactor, (bool) $this->settings->get( 'general.debug_logging' ) );
+		$this->credentials = new CredentialStore( Encryption::fromEnvironment() );
+		$redactor->addSecretSource( fn (): array => $this->credentials->allPlaintextSecrets() );
+
+		$this->http = new HttpClient(
+			$this->logger,
+			new UrlValidator(),
+			max_retries: (int) $this->settings->get( 'ai.max_retries' ),
+			timeout: (int) $this->settings->get( 'ai.request_timeout' ),
+		);
+
+		$this->providers   = new ProviderRegistry( $this->settings, $this->credentials, $this->http );
+		$this->usage       = new UsageRepository();
+		$this->limiter     = new UsageLimiter( $this->usage, $this->settings );
+		$this->costs       = new CostEstimator( $this->settings );
+		$this->text        = new TextGenerationService( $this->providers, $this->settings, $this->limiter, $this->usage, $this->costs, $this->logger );
+		$this->images      = new ImageGenerationService( $this->providers, $this->settings, $this->limiter, $this->usage, $this->costs, $this->logger );
+		$this->media       = new MediaImporter();
+		$this->environment = new Environment();
+
+		$this->dataforseo = new DataForSeoProvider( $this->settings, $this->credentials, $this->http );
+		$this->research   = new ResearchGateway( $this->dataforseo, new ResearchCache(), $this->limiter, $this->usage, $this->settings );
+		$this->projects   = new ProjectRepository();
+		$this->versions   = new VersionStore( $this->projects );
+		$this->evaluator  = new Evaluator( $this->projects, new DeterministicChecks(), $this->settings );
+		$this->drafts     = new DraftWriter( $this->projects, $this->versions );
+		$this->handlers   = array(
+			'research'          => new ResearchJob( $this->projects, $this->research, new CompetitorFetcher( $this->http ), $this->text, $this->settings ),
+			'brief'             => new BriefJob( $this->projects, $this->text, $this->settings ),
+			'content'           => new ContentJob( $this->projects, $this->text, $this->settings, $this->versions, $this->evaluator, new SourceVerifier( $this->http ) ),
+			'evaluate'          => new EvaluationJob( $this->projects, $this->text, $this->evaluator, $this->settings ),
+			'optimize_analysis' => new OptimizeJobs( 'optimize_analysis', $this->projects, $this->text, $this->settings, $this->evaluator, $this->versions ),
+			'optimize_rewrite'  => new OptimizeJobs( 'optimize_rewrite', $this->projects, $this->text, $this->settings, $this->evaluator, $this->versions ),
+			'images'            => new ImageJob( $this->projects, $this->images, $this->media ),
+		);
+		// The job lock must outlive the slowest request a step can make (all retries included).
+		$job_ttl         = (int) $this->settings->get( 'ai.request_timeout' ) * ( 1 + (int) $this->settings->get( 'ai.max_retries' ) ) + 180;
+		$this->jobs      = new JobRunner( $this->projects, array_values( $this->handlers ), $this->logger, null, $job_ttl );
+		$this->markets   = new MarketList( $this->research );
+		$this->estimates = new CostEstimates( $this->usage, $this->costs, $this->settings );
+	}
+
+	/**
+	 * Entry point hooked to `plugins_loaded`.
+	 */
+	public static function boot(): void {
+		if ( null !== self::$instance ) {
+			return;
+		}
+		self::$instance = new self();
+		self::$instance->registerHooks();
+	}
+
+	/**
+	 * Access the running instance (null before boot).
+	 */
+	public static function instance(): ?Plugin {
+		return self::$instance;
+	}
+
+	/**
+	 * Register WordPress hooks.
+	 */
+	private function registerHooks(): void {
+		add_action( 'init', array( $this, 'loadTextdomain' ) );
+		// Cheap version check; cron and REST requests may run before any admin page load.
+		Migrations::maybeMigrate();
+		add_action( 'rest_api_init', array( $this, 'registerRestRoutes' ) );
+		add_action( 'init', array( $this, 'scheduleMaintenance' ) );
+		add_action( 'aiscs_prune_usage_log', array( $this, 'pruneUsageLog' ) );
+		add_action( 'init', array( ProjectRepository::class, 'registerPostType' ) );
+		add_action( JobRunner::HOOK, array( $this, 'runJob' ), 10, 2 );
+
+		// Blog template shortcodes render on the front end and in the Elementor editor (admin AJAX).
+		( new BlogShortcodes() )->register();
+
+		if ( is_admin() ) {
+			( new AdminPage( $this->environment, $this->settings ) )->register();
+		} else {
+			( new MetaOutput( $this->settings, $this->environment ) )->register();
+		}
+	}
+
+	/**
+	 * Load translations.
+	 */
+	public function loadTextdomain(): void {
+		load_plugin_textdomain( 'ai-seo-content-studio', false, dirname( plugin_basename( AISCS_FILE ) ) . '/languages' );
+	}
+
+	/**
+	 * Ensure the daily maintenance event exists. WP-Cron timing is approximate,
+	 * which is fine for log pruning.
+	 */
+	public function scheduleMaintenance(): void {
+		if ( ! wp_next_scheduled( 'aiscs_prune_usage_log' ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', 'aiscs_prune_usage_log' );
+		}
+	}
+
+	/**
+	 * Delete usage records older than the retention setting.
+	 */
+	public function pruneUsageLog(): void {
+		$this->usage->prune( (int) $this->settings->get( 'general.usage_retention_days' ) );
+	}
+
+	/**
+	 * Background job callback. The sequence argument only exists to keep WP-Cron
+	 * from de-duplicating consecutive steps.
+	 *
+	 * @param int $project_id Project.
+	 * @param int $seq        Sequence (unused).
+	 */
+	public function runJob( $project_id, $seq = 0 ): void { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
+		$this->jobs->run( (int) $project_id );
+	}
+
+	/**
+	 * Register REST controllers.
+	 */
+	public function registerRestRoutes(): void {
+		( new SettingsController( $this->settings ) )->register();
+		( new ProvidersController( $this->providers, $this->credentials, $this->settings ) )->register();
+		( new UsageController( $this->usage ) )->register();
+		( new StatusController( $this->environment, $this->providers, $this->credentials, $this->settings ) )->register();
+		( new ResearchController( $this->research, $this->dataforseo, $this->credentials, $this->markets ) )->register();
+		$projects_controller = new ProjectsController( $this->projects, $this->jobs, $this->estimates, $this->handlers );
+		$projects_controller->register();
+		( new ContentController( $projects_controller, $this->projects, $this->jobs, $this->evaluator, $this->versions, $this->drafts, $this->settings, $this->environment, new ElementorWriter( $this->projects, $this->drafts, new ElementorBridge() ) ) )->register();
+		( new OptimizerController( $projects_controller, $this->projects, $this->jobs ) )->register();
+		$stock = new StockImages(
+			array(
+				new OpenverseSource( $this->http ),
+				new PexelsSource( $this->http, $this->credentials ),
+				new PixabaySource( $this->http, $this->credentials ),
+			),
+			$this->http,
+			$this->media,
+			$this->projects
+		);
+		( new ImagesController( $projects_controller, $this->projects, $this->jobs, $this->media, $this->images, $stock, $this->credentials ) )->register();
+	}
+}
