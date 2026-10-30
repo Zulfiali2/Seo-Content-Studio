@@ -4,7 +4,7 @@ Tags: seo, ai, content, elementor, keyword research
 Requires at least: 6.6
 Tested up to: 6.7
 Requires PHP: 8.2
-Stable tag: 1.9.0-beta.1
+Stable tag: 1.9.0-beta.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -54,6 +54,9 @@ Nothing is sent until you add a key and run an action.
 3. Go to AI SEO Studio → AI Providers, save an API key, run "Test connection", choose a text model and a default provider.
 
 == Changelog ==
+
+= 1.9.0-beta.2 =
+* AI Website Studio phase 5: Image to Design. Upload a screenshot or design export; an AI vision model (OpenAI, Claude, Gemini or Grok) reads its layout and colours, you review the structure, then a native Elementor draft is built with new SEO content or the screenshot's own text. The screenshot is deleted right after it is read.
 
 = 1.9.0-beta.1 =
 * AI Website Studio phase 4: HTML/CSS to Elementor. Paste or upload a design; it is rebuilt with native, editable Elementor widgets (responsive columns, sizes and padding from your media queries), with a conversion report. Scripts are never run.

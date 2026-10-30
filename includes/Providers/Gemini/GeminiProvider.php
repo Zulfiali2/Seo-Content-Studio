@@ -8,6 +8,7 @@
 namespace AiSeoContentStudio\Providers\Gemini;
 
 use AiSeoContentStudio\Providers\AbstractProvider;
+use AiSeoContentStudio\Providers\Contracts\ImageInput;
 use AiSeoContentStudio\Providers\Contracts\Capability;
 use AiSeoContentStudio\Providers\Contracts\ImageGenerationInterface;
 use AiSeoContentStudio\Providers\Contracts\ImageRequest;
@@ -52,7 +53,7 @@ class GeminiProvider extends AbstractProvider implements ImageGenerationInterfac
 	 * {@inheritDoc}
 	 */
 	public function capabilities(): array {
-		return array( Capability::TEXT, Capability::STRUCTURED_OUTPUT, Capability::IMAGE, Capability::MODEL_LISTING, Capability::USAGE_REPORTING );
+		return array( Capability::TEXT, Capability::STRUCTURED_OUTPUT, Capability::IMAGE, Capability::VISION, Capability::MODEL_LISTING, Capability::USAGE_REPORTING );
 	}
 
 	/**
@@ -97,7 +98,18 @@ class GeminiProvider extends AbstractProvider implements ImageGenerationInterfac
 			// Shared context first: Gemini 2.5+ caches identical prompt starts implicitly.
 			$contents[] = array(
 				'role'  => 'assistant' === $m->role ? 'model' : 'user',
-				'parts' => array( array( 'text' => $request->renderedContent( (int) $i ) ) ),
+				'parts' => array_merge(
+					array_map(
+						static fn ( ImageInput $image ): array => array(
+							'inlineData' => array(
+								'mimeType' => $image->mime,
+								'data'     => $image->base64,
+							),
+						),
+						$m->images
+					),
+					array( array( 'text' => $request->renderedContent( (int) $i ) ) )
+				),
 			);
 		}
 		$body     = array(

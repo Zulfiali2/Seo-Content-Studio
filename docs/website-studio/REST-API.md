@@ -233,3 +233,41 @@ Returns 201 with the draft result and the report. Returns 422 when the HTML cann
 - Section `style.background_image`: an http(s) image URL.
 - `{ "type": "video", "url": "https://www.youtube.com/watch?v=…" | "https://vimeo.com/…" }`.
 - `{ "type": "html", "html": "…" }`: accepted only by the converter's fallback (validator mode `converted`), and sanitised to allow-listed tags and safe inline styles.
+
+
+---
+
+# Phase 5: Image to Design (1.9.0-beta.2)
+
+## POST /design/image/analyze
+
+Multipart form:
+- `screenshot`: PNG/JPEG/WebP, ≤10 MB, 64–8192 px per side, within the pixel limit.
+- `model` (optional): vision model ID, `^[A-Za-z0-9._:/-]{0,100}$`.
+
+Needs `aiscs_generate_content` and active Elementor. Stores the file temporarily, creates a studio project and starts the analysis job. Returns 202 `{ project_id, job }`.
+
+Errors: 400 no or invalid file, 413 too large, 424 Elementor missing, 409 a job is already running.
+
+## GET /design/jobs/{project_id}
+
+As for cloning, plus:
+
+```json
+{ "source": "screenshot",
+  "design": { "document": "PageDocument (image slots as {type: image, aspect, alt})", "tokens": "DesignTokens",
+              "report": { "approximations": ["visual_approximation", "fonts_guessed|fonts_unknown", "photo_backgrounds"],
+                          "observations": [], "icons_replaced": 0, "dropped": 0, "photo_backgrounds": 0, "tiles": 2, "truncated": false },
+              "provider": "openai", "model": "..." } }
+```
+
+## POST /design/image/{project_id}/generate
+
+Owner only. Body:
+- `keep_text` (boolean). When false, `topic` and `primary_keyword` are required.
+- Brief: `topic`, `primary_keyword`, `secondary_keywords`, `audience`, `intent`, `location`, `tone`, `notes`.
+- `title`.
+- `profile_id` (must be the user's own).
+- `placeholders` (boolean, default true; needs `upload_files` and GD).
+
+Starts the build job (write → images → build) and returns 202. The draft's `generation_type` is `screenshot`. Returns 409 when the project has not been analysed or a draft was already made from it.

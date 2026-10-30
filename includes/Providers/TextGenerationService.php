@@ -73,7 +73,15 @@ class TextGenerationService {
 			throw new ProviderException( sprintf( __( '%s is not configured yet.', 'ai-seo-content-studio' ), $provider->label() ), ProviderException::CONFIG );
 		}
 
-		$max_input = (int) $this->settings->get( 'ai.max_input_chars' );
+		if ( $request->hasImages() && ! $provider->supports( Capability::VISION ) ) {
+			throw new ProviderException(
+				/* translators: %s: provider name. */
+				sprintf( __( '%s cannot read images. Choose OpenAI, Anthropic Claude, Google Gemini or xAI Grok as the default text provider for screenshot analysis.', 'ai-seo-content-studio' ), $provider->label() ),
+				ProviderException::CONFIG
+			);
+		}
+
+				$max_input = (int) $this->settings->get( 'ai.max_input_chars' );
 		if ( $request->inputLength() > $max_input ) {
 			throw new ProviderException(
 				/* translators: %d: character limit. */

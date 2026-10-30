@@ -60,7 +60,7 @@ Baseline audited: **AI SEO Content Studio 1.6.8**, the uploaded ZIP. The brief n
 | 2 | Page cloner (new draft, new widget IDs, content replacement, original untouched) | **Done (1.8.0)**, unit tests only |
 | 3 | Normalized design schema + Elementor mapper + document validator | **Done (1.8.0)**, unit tests only |
 | 4 | HTML/CSS → Elementor (reuses `CssParser`) | **Done (1.9.0-beta.1)**, unit tests only |
-| 5 | Screenshot → design (vision) | Not started |
+| 5 | Screenshot → design (vision) | **Done (1.9.0-beta.2)**, unit tests only |
 | 6 | Content-to-design generation, section images, internal links | Not started |
 | 7 | Consistency checker, accessibility checker, section regeneration, preview, revisions, design library | Not started |
 | 8 | QA, live WP/Elementor matrix, packaging | Not started |
@@ -119,4 +119,17 @@ HTML + CSS (+ JS, analysed only)
   └─ tokens: CssStyleAnalyzer + BrandExtractor on the same CSS (when no brand profile is chosen)
   └─ PageBuilder::build(MODE_CONVERTED) → ElementorMapper (element styles, video, html, background image)
        → DocumentValidator(MODE_CONVERTED) → DraftManager::create
+```
+
+## 8. Phase 5 design (implemented in 1.9.0-beta.2)
+
+```
+Upload (multipart) -> ScreenshotPreparer::validate -> ScreenshotStore::put (temp, token)
+studio_screenshot_analyze: tiles (1280 px wide, <=1400 px slices, JPEG) -> TextRequest with ImageInput
+     -> provider body (OpenAI/xAI input_image | Anthropic image blocks | Gemini inlineData)
+     -> VisionDesign::toDocument (Output A: PageDocument + tokens + report) -> delete screenshot
+review in the UI
+studio_screenshot_build: write (Output B: CloneContentGenerator on VisionDesign::slots, optional)
+     -> images (PlaceholderImage + MediaImporter, optional) -> resolveImages
+     -> PageBuilder::build (MODE_GENERATED) -> DraftManager
 ```

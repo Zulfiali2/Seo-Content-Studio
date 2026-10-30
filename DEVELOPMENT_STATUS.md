@@ -1,6 +1,6 @@
 # Development status — AI Website Studio
 
-Last updated: 2026-10-30. Plugin version **1.9.0-beta.1** (DB version 7). Target for the full studio: 1.9.0.
+Last updated: 2026-10-30. Plugin version **1.9.0-beta.2** (DB version 7). Target for the full studio: 1.9.0.
 
 ## Summary
 
@@ -24,7 +24,10 @@ Last updated: 2026-10-30. Plugin version **1.9.0-beta.1** (DB version 7). Target
 | 4 | HtmlConverter (structure, layout detection, native widget mapping, report, fallback) | ✅ Implemented |
 | 4 | Engine additions (element styles, video, html fallback, background image, converted mode) | ✅ Implemented |
 | 4 | REST `/design/html/parse`, `/design/html/convert` + HTML to Elementor screen (sandboxed preview) | ✅ Implemented |
-| 5 | Screenshot → design (vision) | ⏳ Not started |
+| 5 | Provider vision support (ImageInput, VISION capability; OpenAI, xAI, Anthropic, Gemini bodies) | ✅ Implemented (1.9.0-beta.2) |
+| 5 | Screenshot validation, tiling and temporary store | ✅ Implemented |
+| 5 | VisionDesign (Output A: structure; Output B: slots and content) | ✅ Implemented |
+| 5 | Screenshot jobs, REST `/design/image/*`, Image to Design screen with review | ✅ Implemented |
 | 6 | AI page generator from a brief, section images, internal links | ⏳ Not started (it should output a PageDocument and reuse PageBuilder) |
 | 7 | Consistency, accessibility, section regeneration, preview, revisions, design library | ⏳ Not started (section maps are stored for regeneration; `DraftManager::update()` and `ElementorMapper::mapSection()` exist) |
 | 8 | Live WP/Elementor QA matrix, 1.9.0 packaging | ⏳ Not started |
@@ -37,10 +40,28 @@ Last updated: 2026-10-30. Plugin version **1.9.0-beta.1** (DB version 7). Target
 |---|---|
 | A: Existing page cloning (select → analyze → topic → SEO content → duplicate → replace → draft → open in Elementor) | Code complete; needs a live run (TESTING.md 13–15) |
 | B: HTML → Elementor (paste → parse → native widgets → validate → preview → draft → edit) | Code complete; needs a live run (TESTING.md 18–20) |
-| C: Screenshot → Elementor | Phase 5 |
+| C: Screenshot → Elementor (upload → analyse → brand and layout → content → placeholder images → layout → draft) | Code complete; needs a live run with real providers (TESTING.md 21–24) |
 | D: Brand consistency | Profiles done; checker in phase 7 |
 | E: Section regeneration | Phase 7 (foundations exist) |
 | F: Design library | Phase 7 |
+
+## Files changed in 1.9.0-beta.2
+
+New:
+- `includes/Providers/Contracts/ImageInput.php`
+- `includes/WebsiteStudio/Vision/`: `ScreenshotPreparer`, `ScreenshotStore`, `VisionDesign`, `ScreenshotJob`
+- `tests/unit/VisionTest.php`
+
+Changed:
+- `Providers/Contracts/Message.php`, `TextRequest.php`, `Capability.php`
+- `Providers/OpenAI`, `Anthropic` and `Gemini` provider classes
+- `Providers/TextGenerationService.php`
+- `Core/Plugin.php`
+- `REST/WebsiteDesignController.php`
+- `Persistence/GeneratedPageRepository.php`
+- `Admin/WebsiteStudioPage.php`
+- `assets/website-studio/*`
+- docs
 
 ## Files changed in 1.9.0-beta.1
 
@@ -71,10 +92,17 @@ Changed:
 
 - `php -l` on every PHP file: no syntax errors (PHP 8.3).
 - `node --check assets/website-studio/studio.js`: OK.
-- `php tests/run.php`: **62 passed, 0 failed** (run three times in a row, deterministic).
+- `php tests/run.php`: **70 passed, 0 failed**.
 - Converter benchmark: a page with about 2,000 elements and 1,500 CSS rules converts in 0.12 s (12 MB peak).
 
 ## Known limitations
+
+- **Screenshot to design (phase 5)** is a visual approximation.
+  - Layout quality depends on the vision model, and fonts are guessed (or left to the theme).
+  - Photo backgrounds and real images are not recreated: placeholders are added, and AI images come in phase 6.
+  - Tablet and mobile layouts follow rules; they are not observed from the screenshot.
+  - Provider request formats follow each API's documentation and are unit-tested, but they have not been sent to the real APIs from this environment.
+  - Custom OpenAI-compatible endpoints cannot read screenshots yet.
 
 0. **HTML conversion (phase 4)** approximates layouts. Converted:
    - flex/grid rows become columns; absolute positioning, transforms and animations are reported and not converted;

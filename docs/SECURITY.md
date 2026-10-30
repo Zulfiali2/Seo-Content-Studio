@@ -159,3 +159,21 @@ Report vulnerabilities privately to the plugin maintainer, not in public issues.
 - **HTML widget fallback** is opt-in and limited to content without a native widget. It keeps only allow-listed tags, and only inline style properties from an allow-list whose values contain no `url()`, `expression`, `javascript` or escapes. Scripts, iframes, SVG, forms, objects and event handlers are always removed. The validator accepts the HTML widget only in `converted` mode, and still rejects executable content there. Elementor runs `wp_kses_post()` on save for users without `unfiltered_html`.
 - **Bounded work.** HTML and CSS are capped at 1 MB each, the document at 8,000 elements, and the result at 40 sections and 60 elements per section. CSS limits are the parser's: 5,000 rules, nesting depth. Selector matching is indexed by the rightmost compound. A 2,000-element page with 1,500 rules converts in about 0.1 s.
 - **Permissions.** Both routes need `aiscs_generate_content`, and saving a page needs `edit_pages`. A brand profile used for styling must be the user's own (or the user has the manage capability).
+
+## AI Website Studio — screenshots and vision requests (1.9.0-beta.2)
+
+- **Upload checks.** The file must pass `is_uploaded_file()` and be ≤10 MB. The type comes from the file signature (PNG/JPEG/WebP), cross-checked with the decoded header, and must be 64–8192 px per side and within the plugin's pixel limit (`aiscs_max_image_pixels`). The client's file name and MIME type are ignored.
+- **Storage.** The screenshot is kept only until it is analysed, in `uploads/aiscs-studio-tmp/{32 hex}.bin`.
+  - The `.bin` extension means it is never served as an image. An `index.php` and a deny-all `.htaccess` are added; on nginx, the random name and the extension are the protection.
+  - Tokens are validated before any path is built, so they cannot traverse.
+  - The file is deleted after a successful analysis or a final failure, and pruned daily after 24 hours. Only the analysis (text) is kept.
+- **Privacy.** Tiles are re-encoded as JPEG, so EXIF/GPS metadata is not sent. The screenshot goes only to the user's chosen text provider, with the user's own key, and the UI says so. Screenshots may contain personal data.
+- **Untrusted model output.** The vision answer is strict JSON, and every value passes VisionDesign and then the PageDocument, DesignTokens and HtmlFragment sanitisers:
+  - colours are hex only;
+  - text is plain or allow-listed HTML;
+  - buttons link to `#`;
+  - icons come from an allow-list;
+  - at most 40 sections, and 60 elements per section.
+
+  Missing content becomes visible placeholders, never invented facts. Pages pass the DocumentValidator in `generated` mode, so no HTML widget is possible.
+- **Costs.** One vision request per screenshot, plus one optional text request for the content. Both go through TextGenerationService (limits, usage log, duplicate-request lock). Retried steps never repeat a request.

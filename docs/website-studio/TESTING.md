@@ -19,6 +19,7 @@ php tests/run.php CssParser  # filter by class or method name
 | `ClonerTest` | New ids for every element and repeater item with settings kept, slot detection and protection, apply only allowed slots, AI answer validation, end-to-end clone with the source untouched |
 | `CloneJobTest` | Full job run, selection rules, no repeated AI request or second draft on retry, access loss stops the job |
 | `ConverterTest` | Selector matcher (supported and unsupported selectors, specificity), cascade (inline, specificity, media per device, inheritance), a full landing page (sections, grid 3/2/1, split, buttons and variants, cards, icons, images, tables, YouTube, accordion, gradient and contrast fixes, fallback), the report, tokens from the page's CSS, untrusted input (scripts, handlers, `javascript:`, `data:`, unknown iframes, objects, unsafe inline styles), limits, and the converted save path |
+| `VisionTest` | ImageInput and messages with images, request hashes, OpenAI/Grok/Anthropic/Gemini vision bodies and capabilities, screenshot validation and tiling (tall images, metadata removal, corrupt files), temporary store (traversal, prune), strict vision schema, vision answer to a valid PageDocument (one H1, layout fixes, icons, tokens, placeholders), slots and new content (unknown keys never create elements), both screenshot jobs end to end with retries, kept text without AI |
 | `CredentialRotationTest` | Reading with the previous key, re-encryption, wrong previous key leaves data untouched |
 
 The persistence tests use an in-memory SQLite `wpdb` double (`tests/fakes.php`), which checks the repository SQL and the permission logic. They do not replace a run on MySQL/MariaDB.
@@ -60,3 +61,12 @@ The 1.7.0 and 1.8.0 code has **not yet been run inside WordPress**. Before relea
     - Create the draft and open it in Elementor: hero, 3-column cards (2 on tablet, 1 on mobile), the about split with the YouTube video, and the FAQ accordion. Everything can be edited.
 19. Repeat with "Keep content … in an HTML widget": the `<dl>` appears as an HTML widget and nothing else does.
 20. As an Editor without `unfiltered_html`, convert HTML containing `<script>` and `onerror=`: neither appears anywhere in the saved page (check the Elementor JSON with "Export Template").
+
+### Phase 5 (1.9.0-beta.2), still to be checked on a real site
+
+21. With OpenAI, Anthropic and Gemini as the default text provider in turn, upload a full-page landing-page screenshot.
+    - Analyze: the review lists its sections with plausible layouts and colours, and the file is gone from `uploads/aiscs-studio-tmp/`.
+    - Create with a brief: a draft with new text, placeholder images and the screenshot's colours, editable in Elementor. Usage and Costs shows two requests.
+22. Same with "Keep the text from the screenshot" and a brand profile: one request only, and the brand colours are used.
+23. With a custom endpoint as the default provider, the analysis fails with "cannot read images" and nothing is billed.
+24. A renamed text file (`fake.png`), a 9000 px wide image, or a 12 MB file: each is refused before any AI request.

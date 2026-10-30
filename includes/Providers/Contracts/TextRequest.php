@@ -99,7 +99,17 @@ final readonly class TextRequest {
 		return 0;
 	}
 
-	/** Total characters of input (for request-size limits). */
+	/** Whether any message carries an image (needs a vision-capable provider and model). */
+	public function hasImages(): bool {
+		foreach ( $this->messages as $message ) {
+			if ( array() !== $message->images ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+		/** Total characters of input (for request-size limits). */
 	public function inputLength(): int {
 		$length = strlen( $this->system ) + strlen( $this->sharedContext );
 		foreach ( $this->messages as $message ) {
@@ -117,7 +127,7 @@ final readonly class TextRequest {
 					$this->system,
 					$this->sharedContext,
 					$this->effort,
-					array_map( static fn ( Message $m ): array => array( $m->role, $m->content ), $this->messages ),
+					array_map( static fn ( Message $m ): array => array( $m->role, $m->content, array_map( static fn ( ImageInput $i ): string => $i->sha1, $m->images ) ), $this->messages ),
 					$this->maxOutputTokens,
 					$this->model,
 					$this->jsonSchema,

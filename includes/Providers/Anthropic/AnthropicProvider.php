@@ -8,6 +8,7 @@
 namespace AiSeoContentStudio\Providers\Anthropic;
 
 use AiSeoContentStudio\Providers\AbstractProvider;
+use AiSeoContentStudio\Providers\Contracts\ImageInput;
 use AiSeoContentStudio\Providers\Contracts\Capability;
 use AiSeoContentStudio\Providers\Contracts\ModelInfo;
 use AiSeoContentStudio\Providers\Contracts\ProviderException;
@@ -46,7 +47,7 @@ class AnthropicProvider extends AbstractProvider {
 	 * {@inheritDoc}
 	 */
 	public function capabilities(): array {
-		return array( Capability::TEXT, Capability::STRUCTURED_OUTPUT, Capability::MODEL_LISTING, Capability::USAGE_REPORTING );
+		return array( Capability::TEXT, Capability::STRUCTURED_OUTPUT, Capability::VISION, Capability::MODEL_LISTING, Capability::USAGE_REPORTING );
 	}
 
 	/**
@@ -85,20 +86,52 @@ class AnthropicProvider extends AbstractProvider {
 		$first    = $request->firstUserIndex();
 		$messages = array();
 		foreach ( $request->messages as $i => $m ) {
+			// Images come before the text that refers to them (Anthropic's recommended order).
+			$images = array_map(
+				static fn ( ImageInput $image ): array => array(
+					'type'   => 'image',
+					'source' => array(
+						'type'       => 'base64',
+						'media_type' => $image->mime,
+						'data'       => $image->base64,
+					),
+				),
+				$m->images
+			);
+			if ( array() !== $images && ! ( $i === $first && '' !== $request->sharedContext ) ) {
+				$messages[] = array(
+					'role'    => $m->role,
+					'content' => array_merge(
+						$images,
+						array(
+							array(
+								'type' => 'text',
+								'text' => $m->content,
+							),
+						)
+					),
+				);
+				continue;
+			}
 			if ( $i === $first && '' !== $request->sharedContext ) {
 				// Shared context first, marked for prompt caching; the varying task follows.
 				$messages[] = array(
 					'role'    => $m->role,
-					'content' => array(
+					'content' => array_merge(
 						array(
-							'type'          => 'text',
-							'text'          => $request->sharedContext,
-							'cache_control' => array( 'type' => 'ephemeral' ),
+							array(
+								'type'          => 'text',
+								'text'          => $request->sharedContext,
+								'cache_control' => array( 'type' => 'ephemeral' ),
+							),
 						),
+						$images,
 						array(
-							'type' => 'text',
-							'text' => $m->content,
-						),
+							array(
+								'type' => 'text',
+								'text' => $m->content,
+							),
+						)
 					),
 				);
 				continue;

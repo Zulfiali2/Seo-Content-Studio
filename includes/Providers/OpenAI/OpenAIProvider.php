@@ -9,6 +9,7 @@ namespace AiSeoContentStudio\Providers\OpenAI;
 
 use AiSeoContentStudio\Http\HttpClient;
 use AiSeoContentStudio\Providers\AbstractProvider;
+use AiSeoContentStudio\Providers\Contracts\ImageInput;
 use AiSeoContentStudio\Providers\Contracts\Capability;
 use AiSeoContentStudio\Providers\Contracts\ImageGenerationInterface;
 use AiSeoContentStudio\Providers\Contracts\ImageRequest;
@@ -48,7 +49,7 @@ class OpenAIProvider extends AbstractProvider implements ImageGenerationInterfac
 	 * {@inheritDoc}
 	 */
 	public function capabilities(): array {
-		return array( Capability::TEXT, Capability::STRUCTURED_OUTPUT, Capability::IMAGE, Capability::MODEL_LISTING, Capability::USAGE_REPORTING );
+		return array( Capability::TEXT, Capability::STRUCTURED_OUTPUT, Capability::IMAGE, Capability::VISION, Capability::MODEL_LISTING, Capability::USAGE_REPORTING );
 	}
 
 	/**
@@ -77,6 +78,27 @@ class OpenAIProvider extends AbstractProvider implements ImageGenerationInterfac
 		$input = array();
 		foreach ( $request->messages as $i => $m ) {
 			// Shared context first: identical prompt starts are cached automatically.
+			if ( array() !== $m->images ) {
+				// Vision input: text part plus image parts (Responses API content parts).
+				$parts = array(
+					array(
+						'type' => 'input_text',
+						'text' => $request->renderedContent( (int) $i ),
+					),
+				);
+				foreach ( $m->images as $image ) {
+					$parts[] = array(
+						'type'      => 'input_image',
+						'image_url' => $image->dataUrl(),
+						'detail'    => 'high',
+					);
+				}
+				$input[] = array(
+					'role'    => $m->role,
+					'content' => $parts,
+				);
+				continue;
+			}
 			$input[] = array(
 				'role'    => $m->role,
 				'content' => $request->renderedContent( (int) $i ),

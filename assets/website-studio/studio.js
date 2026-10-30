@@ -157,7 +157,7 @@
 			[ __( 'Clone Existing Page', T ), __( 'Available', T ), boot.urls.clone ],
 			[ __( 'Native Elementor engine and Generated Pages', T ), __( 'Available', T ), boot.urls.pages ],
 			[ __( 'HTML to Elementor', T ), __( 'Available', T ), boot.urls.html ],
-			[ __( 'Image to Design', T ), __( 'Planned: phase 5', T ) ],
+			[ __( 'Image to Design', T ), __( 'Available', T ), boot.urls.image ],
 			[ __( 'AI Page Generator, images and internal links', T ), __( 'Planned: phase 6', T ) ],
 			[ __( 'Consistency, accessibility, preview, revisions, design library', T ), __( 'Planned: phase 7', T ) ],
 		];
@@ -670,7 +670,7 @@
 	}
 
 	/** Poll a background job until it ends. */
-	function useJob( projectId ) {
+	function useJob( projectId, run ) {
 		const [ state, setState ] = useState( null );
 		useEffect( () => {
 			if ( ! projectId ) {
@@ -701,7 +701,7 @@
 				stop = true;
 				clearTimeout( timer );
 			};
-		}, [ projectId ] );
+		}, [ projectId, run ] );
 		return state;
 	}
 
@@ -982,7 +982,7 @@
 				.finally( () => setBusy( false ) );
 		};
 
-		const TYPE_LABELS = { generated: __( 'Generated', T ), clone: __( 'Duplicate', T ), clone_generated: __( 'Clone + new content', T ), converted: __( 'From HTML', T ) };
+		const TYPE_LABELS = { generated: __( 'Generated', T ), clone: __( 'Duplicate', T ), clone_generated: __( 'Clone + new content', T ), converted: __( 'From HTML', T ), screenshot: __( 'From screenshot', T ) };
 		return el(
 			Fragment,
 			null,
@@ -1273,6 +1273,209 @@
 		);
 	}
 
+	/* ------------------------------------------------------------ Image to Design */
+
+	const VISION_NOTES = {
+		visual_approximation: __( 'This is a visual approximation of the screenshot, not a pixel-perfect copy. A screenshot does not show the source code, exact fonts, hover effects or how the page behaves on other screens; tablet and mobile layouts are generated.', T ),
+		fonts_guessed: __( 'Fonts were recognised by eye and may differ from the original.', T ),
+		fonts_unknown: __( 'The fonts could not be recognised; your theme or brand profile fonts are used.', T ),
+		photo_backgrounds: __( 'Photo backgrounds were not recreated. Add a background image in Elementor, or generate one in a later step.', T ),
+	};
+
+	function ImageToDesign() {
+		const [ file, setFile ] = useState( null );
+		const [ preview, setPreview ] = useState( '' );
+		const [ model, setModel ] = useState( '' );
+		const [ projectId, setProjectId ] = useState( 0 );
+		const [ run, setRun ] = useState( 0 );
+		const [ profiles, setProfiles ] = useState( [] );
+		const [ form, setForm ] = useState( { keep_text: false, topic: '', primary_keyword: '', secondary: '', audience: '', intent: '', location: '', tone: '', notes: '', title: '', profile_id: '0', placeholders: true } );
+		const [ busy, setBusy ] = useState( false );
+		const [ noticeView, setNotice ] = useNotice();
+		const state = useJob( projectId, run );
+
+		useEffect( () => {
+			apiFetch( { path: '/aiscs/v1/website/brand-profiles?page=1' } )
+				.then( ( r ) => setProfiles( r.items || [] ) )
+				.catch( () => setProfiles( [] ) );
+		}, [] );
+		useEffect( () => () => preview && window.URL.revokeObjectURL( preview ), [ preview ] );
+		const set = ( key ) => ( v ) => setForm( Object.assign( {}, form, { [ key ]: v } ) );
+
+		const choose = ( e ) => {
+			const f = e.target.files && e.target.files[ 0 ];
+			if ( ! f ) {
+				return;
+			}
+			if ( f.size > 10485760 ) {
+				setNotice( { status: 'error', text: __( 'The screenshot is larger than 10 MB.', T ) } );
+				return;
+			}
+			setFile( f );
+			setPreview( window.URL.createObjectURL( f ) );
+		};
+		const analyze = () => {
+			const body = new window.FormData();
+			body.append( 'screenshot', file );
+			body.append( 'model', model.trim() );
+			setBusy( true );
+			apiFetch( { path: '/aiscs/v1/design/image/analyze', method: 'POST', body } )
+				.then( ( r ) => {
+					setProjectId( r.project_id );
+					setRun( run + 1 );
+					setNotice( null );
+				} )
+				.catch( ( e ) => setNotice( { status: 'error', text: errorText( e ) } ) )
+				.finally( () => setBusy( false ) );
+		};
+		const generate = () => {
+			setBusy( true );
+			apiFetch( {
+				path: '/aiscs/v1/design/image/' + projectId + '/generate',
+				method: 'POST',
+				data: {
+					keep_text: form.keep_text,
+					topic: form.topic,
+					primary_keyword: form.primary_keyword,
+					secondary_keywords: form.secondary.split( ',' ).map( ( s ) => s.trim() ).filter( Boolean ),
+					audience: form.audience,
+					intent: form.intent,
+					location: form.location,
+					tone: form.tone,
+					notes: form.notes,
+					title: form.title,
+					profile_id: parseInt( form.profile_id, 10 ) || 0,
+					placeholders: form.placeholders,
+				},
+			} )
+				.then( () => setRun( run + 1 ) )
+				.catch( ( e ) => setNotice( { status: 'error', text: errorText( e ) } ) )
+				.finally( () => setBusy( false ) );
+		};
+		const reset = () => {
+			setProjectId( 0 );
+			setFile( null );
+			setPreview( '' );
+		};
+
+		const job = state && state.job ? state.job : null;
+		const running = job && ( 'queued' === job.status || 'running' === job.status );
+		const design = state && state.design;
+
+		const steps = running
+			? el(
+					'div',
+					{ className: 'aiscs-studio__card' },
+					el( 'h2', null, __( 'Working…', T ) ),
+					el( 'ol', { className: 'aiscs-studio__steps' }, ( job.steps || [] ).map( ( s, i ) => el( 'li', { key: s.id, className: i < job.step_index ? 'is-done' : i === job.step_index ? 'is-current' : '' }, s.label, i === job.step_index ? el( Spinner ) : null ) ) ),
+					el( 'p', { className: 'description' }, job.message )
+			  )
+			: null;
+
+		const uploadForm = el(
+			Fragment,
+			null,
+			el( 'p', { className: 'description' }, __( 'Upload a screenshot or design export of a web page (PNG, JPEG or WebP, up to 10 MB). An AI vision model reads its layout and colours; the page is rebuilt with native, editable Elementor widgets. Full-page screenshots are fine: they are read in slices.', T ) ),
+			el( 'label', { className: 'aiscs-studio__file' }, el( 'span', null, __( 'Screenshot', T ) ), el( 'input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', onChange: choose } ) ),
+			el( TextControl, { label: __( 'Vision model (optional; leave empty to use your default text model)', T ), value: model, onChange: setModel, placeholder: 'gpt-4.1, claude-sonnet-4-5, gemini-2.5-flash', __nextHasNoMarginBottom: true } ),
+			el( 'p', { className: 'description' }, __( 'Uses your default text provider (OpenAI, Anthropic, Gemini or xAI; custom endpoints cannot read images yet). The analysis is one AI request and is counted in Usage and Costs. The screenshot is deleted from the server right after it is read.', T ) ),
+			el( 'div', { className: 'aiscs-studio__actions' }, el( Button, { variant: 'primary', isBusy: busy, disabled: busy || ! file, onClick: analyze }, __( 'Analyze screenshot', T ) ) )
+		);
+
+		const review = design
+			? el(
+					'div',
+					{ className: 'aiscs-studio__result' },
+					el( 'h2', null, __( 'Design structure found in the screenshot', T ) ),
+					el( 'p', { className: 'description' }, sprintf( __( 'Read by %1$s (%2$s).', T ), design.provider, design.model ) ),
+					( design.report.approximations || [] ).map( ( a ) => el( Notice, { key: a, status: 'visual_approximation' === a ? 'info' : 'warning', isDismissible: false }, VISION_NOTES[ a ] || a ) ),
+					design.report.truncated ? el( Notice, { status: 'warning', isDismissible: false }, __( 'The screenshot is very tall; only its upper part was read.', T ) ) : null,
+					el(
+						'div',
+						{ className: 'aiscs-studio__vision' },
+						preview ? el( 'img', { src: preview, alt: __( 'Uploaded screenshot', T ), className: 'aiscs-studio__shot' } ) : null,
+						el(
+							'div',
+							null,
+							el( TokenSummary, { tokens: design.tokens } ),
+							el(
+								'table',
+								{ className: 'widefat striped' },
+								el( 'thead', null, el( 'tr', null, el( 'th', null, '#' ), el( 'th', null, __( 'Section', T ) ), el( 'th', null, __( 'Layout', T ) ), el( 'th', null, __( 'Elements', T ) ) ) ),
+								el(
+									'tbody',
+									null,
+									design.document.sections.map( ( s, i ) =>
+										el(
+											'tr',
+											{ key: s.id },
+											el( 'td', null, i + 1 ),
+											el( 'td', null, SECTION_LABELS[ s.type ] || s.type ),
+											el( 'td', null, s.layout.kind + ' ' + s.layout.columns.desktop + '/' + s.layout.columns.tablet + '/' + s.layout.columns.mobile ),
+											el( 'td', null, s.elements.map( ( e ) => ( 'group' === e.type ? __( 'card', T ) + '(' + e.elements.map( ( g ) => g.type ).join( ', ' ) + ')' : e.type + ( e.text ? ': “' + e.text.slice( 0, 40 ) + '”' : '' ) ) ).join( ' · ' ) )
+										)
+									)
+								)
+							),
+							( design.report.observations || [] ).length ? el( 'ul', { className: 'aiscs-studio__list-plain' }, design.report.observations.map( ( o, i ) => el( 'li', { key: i }, o ) ) ) : null
+						)
+					),
+					state.result
+						? null
+						: el(
+								Fragment,
+								null,
+								el( 'h2', null, __( 'Content', T ) ),
+								el( CheckboxControl, { label: __( 'Keep the text from the screenshot (no content request)', T ), checked: form.keep_text, onChange: set( 'keep_text' ), __nextHasNoMarginBottom: true } ),
+								form.keep_text
+									? null
+									: el(
+											'div',
+											{ className: 'aiscs-studio__fields' },
+											el( TextControl, { label: __( 'Page topic (required)', T ), value: form.topic, onChange: set( 'topic' ), __nextHasNoMarginBottom: true } ),
+											el( TextControl, { label: __( 'Primary keyword (required)', T ), value: form.primary_keyword, onChange: set( 'primary_keyword' ), __nextHasNoMarginBottom: true } ),
+											el( TextControl, { label: __( 'Secondary keywords (comma separated)', T ), value: form.secondary, onChange: set( 'secondary' ), __nextHasNoMarginBottom: true } ),
+											el( TextControl, { label: __( 'Target audience', T ), value: form.audience, onChange: set( 'audience' ), __nextHasNoMarginBottom: true } ),
+											el( TextControl, { label: __( 'Target location', T ), value: form.location, onChange: set( 'location' ), __nextHasNoMarginBottom: true } ),
+											el( TextControl, { label: __( 'Tone', T ), value: form.tone, onChange: set( 'tone' ), __nextHasNoMarginBottom: true } )
+									  ),
+								form.keep_text ? null : el( wp.components.TextareaControl, { label: __( 'Facts and notes for the AI (the AI does not invent facts)', T ), value: form.notes, onChange: set( 'notes' ), rows: 3 } ),
+								el(
+									'div',
+									{ className: 'aiscs-studio__fields' },
+									el( TextControl, { label: __( 'Page title (optional)', T ), value: form.title, onChange: set( 'title' ), __nextHasNoMarginBottom: true } ),
+									el( SelectControl, {
+										label: __( 'Styles', T ),
+										value: form.profile_id,
+										options: [ { label: __( 'Colours and shapes from the screenshot', T ), value: '0' } ].concat( profiles.map( ( p ) => ( { label: sprintf( __( 'Brand profile: %s', T ), p.name ), value: String( p.id ) } ) ) ),
+										onChange: set( 'profile_id' ),
+										__nextHasNoMarginBottom: true,
+									} )
+								),
+								el( CheckboxControl, { label: __( 'Add placeholder images to the Media Library where the screenshot shows images', T ), checked: form.placeholders, onChange: set( 'placeholders' ), __nextHasNoMarginBottom: true } ),
+								el(
+									'div',
+									{ className: 'aiscs-studio__actions' },
+									el( Button, { variant: 'primary', isBusy: busy, disabled: busy || running || ( ! form.keep_text && ( ! form.topic.trim() || ! form.primary_keyword.trim() ) ), onClick: generate }, __( 'Create Elementor draft', T ) ),
+									el( Button, { variant: 'tertiary', onClick: reset }, __( 'Start over', T ) )
+								)
+						  )
+			  )
+			: null;
+
+		return el(
+			Fragment,
+			null,
+			noticeView,
+			! projectId ? uploadForm : null,
+			state && state.error ? el( Notice, { status: 'error', isDismissible: false }, state.error ) : null,
+			job && ( 'failed' === job.status || 'cancelled' === job.status ) ? el( Fragment, null, el( Notice, { status: 'error', isDismissible: false }, job.message || job.error ), el( Button, { variant: 'secondary', onClick: reset }, __( 'Start over', T ) ) ) : null,
+			steps,
+			state && state.result ? el( Fragment, null, el( DraftResult, { result: state.result } ), state.result.report && state.result.report.placeholders ? el( 'p', { className: 'description' }, sprintf( __( '%d placeholder images were added to the Media Library. Replace them in Elementor with your own images.', T ), state.result.report.placeholders ) ) : null, el( Button, { variant: 'secondary', onClick: reset }, __( 'Convert another screenshot', T ) ) ) : null,
+			review
+		);
+	}
+
 	/* ---------------------------------------------------------------------- Mount */
 
 	const VIEWS = {
@@ -1282,6 +1485,7 @@
 		clone: [ __( 'Clone Existing Page', T ), ClonePage ],
 		pages: [ __( 'Generated Pages', T ), GeneratedPages ],
 		html: [ __( 'HTML to Elementor', T ), HtmlToElementor ],
+		image: [ __( 'Image to Design', T ), ImageToDesign ],
 	};
 
 	function App( { view } ) {

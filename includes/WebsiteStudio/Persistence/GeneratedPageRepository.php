@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
  */
 class GeneratedPageRepository {
 
-	public const TYPES = array( 'generated', 'clone', 'clone_generated', 'converted' );
+	public const TYPES = array( 'generated', 'clone', 'clone_generated', 'converted', 'screenshot' );
 
 	/**
 	 * Insert a record.

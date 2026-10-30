@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       AI SEO Content Studio
  * Description:       SEO research, AI content generation, content optimisation and Elementor Free page building.
- * Version:           1.9.0-beta.1
+ * Version:           1.9.0-beta.2
  * Requires at least: 6.6
  * Requires PHP:      8.2
  * Author:            AQF Digital
@@ -16,7 +16,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'AISCS_VERSION', '1.9.0-beta.1' );
+define( 'AISCS_VERSION', '1.9.0-beta.2' );
 define( 'AISCS_FILE', __FILE__ );
 define( 'AISCS_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AISCS_URL', plugin_dir_url( __FILE__ ) );

@@ -2,6 +2,30 @@
 
 All notable changes to AI SEO Content Studio. Versions follow semantic versioning.
 
+## 1.9.0-beta.2 — 2026-10-30 — AI Website Studio, phase 5: screenshot to design
+
+Added
+- **Image input for AI providers**:
+  - `ImageInput` (PNG/JPEG/WebP by signature, ≤5 MB), images on user messages, and a `vision` capability.
+  - Request bodies for OpenAI Responses and xAI Grok (`input_image`), Anthropic Messages (base64 `image` blocks before the text) and Gemini (`inlineData`).
+  - A request with images to a provider without vision fails with a clear message before anything is sent. Custom OpenAI-compatible endpoints do not claim vision.
+  - Image hashes are part of the request hash, so duplicate-request detection covers images.
+- **Image to Design** screen: upload a screenshot (≤10 MB, 64–8192 px), optionally name a vision model, then analyse.
+  - Review shows the detected sections, layout and columns per device, palette, fonts, button and card shapes, the model's observations and the approximations, next to the uploaded image.
+  - Then keep the screenshot's text or write new content from a brief, optionally add placeholder images to the Media Library, use the screenshot's colours or a brand profile, and create the draft.
+- **Screenshot preparation**: the image is scaled to 1280 px wide and cut into top-to-bottom tiles of up to 1400 px, so tall full-page screenshots stay readable. Tiles are re-encoded as JPEG (EXIF/GPS metadata removed) and sent together in one request.
+- **Output A** (vision, one request): a strict JSON layout (sections, header elements, cards, colours, shapes, transcribed text and lengths) turned into a PageDocument.
+  - One H1 only; split layouts that do not fit become grids; unknown icons become a check icon (reported).
+  - Palette colours become token references, so a brand profile restyles them.
+  - Missing FAQ answers become visible "[Answer to this question]" placeholders, never invented.
+- **Output B** (text, optional, one request): new content for every text slot at its original length, using the clone prompt's rules (no invented facts, testimonials or numbers).
+- **Background jobs** `studio_screenshot_analyze` and `studio_screenshot_build`. Every step stores its result first, so a retry never repeats a billed request, imports images twice or creates a second draft.
+- **Temporary storage**: the uploaded screenshot is kept only until it is analysed, in `uploads/aiscs-studio-tmp/` under a random token (`.bin`, `index.php`, deny-all `.htaccess`).
+  - Deleted after a successful analysis or a final failure.
+  - Kept while a retry is pending.
+  - Pruned daily after 24 hours.
+- **REST**: `POST /design/image/analyze` (multipart `screenshot`, optional `model`) and `POST /design/image/{id}/generate`. `GET /design/jobs/{id}` now returns the design for review.
+
 ## 1.9.0-beta.1 — 2026-10-30 — AI Website Studio, phase 4: HTML/CSS to Elementor
 
 Added

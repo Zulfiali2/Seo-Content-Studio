@@ -22,6 +22,9 @@ use AiSeoContentStudio\WebsiteStudio\Engine\DraftManager;
 use AiSeoContentStudio\WebsiteStudio\Engine\PageDocument;
 use AiSeoContentStudio\WebsiteStudio\Persistence\BrandProfileRepository;
 use AiSeoContentStudio\WebsiteStudio\StudioServices;
+use AiSeoContentStudio\WebsiteStudio\Vision\ScreenshotJob;
+use AiSeoContentStudio\WebsiteStudio\Vision\ScreenshotPreparer;
+use AiSeoContentStudio\WebsiteStudio\Vision\ScreenshotStore;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -245,6 +248,67 @@ class WebsiteDesignController extends RestController {
 		);
 		register_rest_route(
 			self::NAMESPACE,
+			'/design/image/analyze',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'analyzeImage' ),
+				'permission_callback' => array( $this, 'canGenerate' ),
+				'args'                => array(
+					'model' => array(
+						'type'    => 'string',
+						'default' => '',
+						'pattern' => '^[A-Za-z0-9._:/-]{0,100}$',
+					),
+				),
+			)
+		);
+		register_rest_route(
+			self::NAMESPACE,
+			'/design/image/(?P<id>\d+)/generate',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'generateFromImage' ),
+				'permission_callback' => array( $this, 'canAccessStudioProject' ),
+				'args'                => $id + array(
+					'topic'              => $text( 300 ),
+					'primary_keyword'    => $text( 120 ),
+					'secondary_keywords' => array(
+						'type'     => 'array',
+						'items'    => array(
+							'type'      => 'string',
+							'maxLength' => 120,
+						),
+						'maxItems' => 15,
+						'default'  => array(),
+					),
+					'audience'           => $text( 300 ),
+					'intent'             => array(
+						'type'    => 'string',
+						'enum'    => array( '', 'informational', 'commercial', 'transactional', 'local' ),
+						'default' => '',
+					),
+					'location'           => $text( 120 ),
+					'tone'               => $text( 120 ),
+					'notes'              => $text( 3000 ),
+					'title'              => $text( 200 ),
+					'keep_text'          => array(
+						'type'    => 'boolean',
+						'default' => false,
+					),
+					'placeholders'       => array(
+						'type'    => 'boolean',
+						'default' => true,
+					),
+					'profile_id'         => array(
+						'type'    => 'integer',
+						'minimum' => 0,
+						'default' => 0,
+					),
+				),
+			)
+		);
+		register_rest_route(
+			self::NAMESPACE,
 			'/design/pages',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -401,6 +465,14 @@ class WebsiteDesignController extends RestController {
 		return new \WP_REST_Response(
 			array(
 				'project_id' => $id,
+				'source'     => (string) ( $studio['source'] ?? 'clone' ),
+				'design'     => isset( $studio['design'] ) ? array(
+					'document' => self::designView( (array) $studio['design']['document'] ),
+					'tokens'   => $studio['design']['tokens'],
+					'report'   => $studio['design']['report'],
+					'provider' => $studio['design']['provider'] ?? '',
+					'model'    => $studio['design']['model'] ?? '',
+				) : null,
 				'job'        => $this->jobs->publicView( $this->projects->section( $id, 'job' ) ),
 				'result'     => $studio['result'] ?? null,
 				'written'    => isset( $studio['written'] ) ? array(
@@ -532,6 +604,157 @@ class WebsiteDesignController extends RestController {
 		} catch ( DraftException $e ) {
 			return self::draftError( $e );
 		}
+	}
+
+	/**
+	 * POST /design/image/analyze: upload a screenshot (multipart field "screenshot") and start the analysis.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 */
+	public function analyzeImage( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$files = $request->get_file_params();
+		$file  = is_array( $files['screenshot'] ?? null ) ? $files['screenshot'] : null;
+		if ( null === $file || UPLOAD_ERR_OK !== (int) ( $file['error'] ?? UPLOAD_ERR_NO_FILE ) || ! is_string( $file['tmp_name'] ?? null ) || ! is_uploaded_file( $file['tmp_name'] ) ) {
+			return new \WP_Error( 'aiscs_no_screenshot', __( 'Upload a screenshot (PNG, JPEG or WebP).', 'ai-seo-content-studio' ), array( 'status' => 400 ) );
+		}
+		if ( (int) ( $file['size'] ?? 0 ) > ScreenshotPreparer::MAX_UPLOAD_BYTES ) {
+			return new \WP_Error( 'aiscs_screenshot_too_large', __( 'The screenshot is larger than 10 MB.', 'ai-seo-content-studio' ), array( 'status' => 413 ) );
+		}
+		$bytes = (string) file_get_contents( $file['tmp_name'], false, null, 0, ScreenshotPreparer::MAX_UPLOAD_BYTES + 1 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- PHP upload temp file.
+		try {
+			$info = ScreenshotPreparer::validate( $bytes );
+		} catch ( \InvalidArgumentException $e ) {
+			return new \WP_Error( 'aiscs_invalid_screenshot', $e->getMessage(), array( 'status' => 400 ) );
+		}
+		$blocker = $this->studio->compat()->blocker();
+		if ( '' !== $blocker ) {
+			return new \WP_Error( 'aiscs_' . $blocker, DraftManager::blockerMessage( $blocker ), array( 'status' => 424 ) );
+		}
+		$user    = get_current_user_id();
+		$project = $this->projects->create(
+			array(
+				'keyword'      => __( 'Page from screenshot', 'ai-seo-content-studio' ),
+				'content_type' => 'studio_screenshot',
+			),
+			$user
+		);
+		if ( $project <= 0 ) {
+			return new \WP_Error( 'aiscs_project_not_created', __( 'The job could not be created.', 'ai-seo-content-studio' ), array( 'status' => 500 ) );
+		}
+		update_post_meta( $project, ProjectRepository::KIND_META, self::KIND );
+		try {
+			$token = ( new ScreenshotStore() )->put( $bytes );
+		} catch ( \RuntimeException ) {
+			$this->projects->trash( $project );
+			return new \WP_Error( 'aiscs_screenshot_not_stored', __( 'The screenshot could not be stored temporarily. Check that the uploads folder is writable.', 'ai-seo-content-studio' ), array( 'status' => 500 ) );
+		}
+		$this->projects->save(
+			$project,
+			'studio',
+			array(
+				'source' => 'screenshot',
+				'token'  => $token,
+				'upload' => $info,
+				'model'  => (string) $request->get_param( 'model' ),
+			)
+		);
+		try {
+			$job = $this->jobs->start( $project, ScreenshotJob::TYPE_ANALYZE, $user );
+		} catch ( ProviderException $e ) {
+			return new \WP_Error( 'aiscs_job_not_started', $e->getMessage(), array( 'status' => 409 ) );
+		}
+		return new \WP_REST_Response(
+			array(
+				'project_id' => $project,
+				'job'        => $this->jobs->publicView( $job ),
+			),
+			202
+		);
+	}
+
+	/**
+	 * POST /design/image/{project}/generate: write content (optional), add placeholders and build the draft.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 */
+	public function generateFromImage( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$id      = (int) $request->get_param( 'id' );
+		$user    = get_current_user_id();
+		$studio  = (array) $this->projects->section( $id, 'studio' );
+		$profile = (int) $request->get_param( 'profile_id' );
+		if ( 'screenshot' !== ( $studio['source'] ?? '' ) || empty( $studio['design']['document']['sections'] ) ) {
+			return new \WP_Error( 'aiscs_not_analyzed', __( 'Analyse a screenshot first.', 'ai-seo-content-studio' ), array( 'status' => 409 ) );
+		}
+		if ( isset( $studio['result']['page_id'] ) ) {
+			return new \WP_Error( 'aiscs_already_built', __( 'A draft was already created from this analysis. Upload the screenshot again to make another one.', 'ai-seo-content-studio' ), array( 'status' => 409 ) );
+		}
+		if ( $profile > 0 && ! $this->profiles->canAccess( $profile, $user ) ) {
+			return $this->forbidden();
+		}
+		$studio['brief']   = array(
+			'topic'              => Sanitize::text( $request->get_param( 'topic' ), 300 ),
+			'primary_keyword'    => Sanitize::text( $request->get_param( 'primary_keyword' ), 120 ),
+			'secondary_keywords' => Sanitize::strings( $request->get_param( 'secondary_keywords' ), 15, 120 ),
+			'audience'           => Sanitize::text( $request->get_param( 'audience' ), 300 ),
+			'intent'             => Sanitize::text( $request->get_param( 'intent' ), 20 ),
+			'location'           => Sanitize::text( $request->get_param( 'location' ), 120 ),
+			'tone'               => Sanitize::text( $request->get_param( 'tone' ), 120 ),
+			'notes'              => Sanitize::textarea( $request->get_param( 'notes' ), 3000 ),
+		);
+		$studio['options'] = array(
+			'keep_text'    => (bool) $request->get_param( 'keep_text' ),
+			'placeholders' => (bool) $request->get_param( 'placeholders' ),
+			'profile_id'   => $profile,
+			'title'        => Sanitize::text( $request->get_param( 'title' ), 200 ),
+		);
+		if ( ! $studio['options']['keep_text'] && ( '' === $studio['brief']['topic'] || '' === $studio['brief']['primary_keyword'] ) ) {
+			return new \WP_Error( 'aiscs_brief_incomplete', __( 'Enter the page topic and primary keyword, or choose to keep the text from the screenshot.', 'ai-seo-content-studio' ), array( 'status' => 400 ) );
+		}
+		unset( $studio['written'], $studio['image_ids'] );
+		$this->projects->save( $id, 'studio', $studio );
+		try {
+			$job = $this->jobs->start( $id, ScreenshotJob::TYPE_BUILD, $user );
+		} catch ( ProviderException $e ) {
+			return new \WP_Error( 'aiscs_job_not_started', $e->getMessage(), array( 'status' => 409 ) );
+		}
+		return new \WP_REST_Response(
+			array(
+				'project_id' => $id,
+				'job'        => $this->jobs->publicView( $job ),
+			),
+			202
+		);
+	}
+
+	/**
+	 * Design document for review: image slots shown as placeholders, internal keys removed.
+	 *
+	 * @param array<string, mixed> $doc Document.
+	 * @return array<string, mixed>
+	 */
+	private static function designView( array $doc ): array {
+		$clean = static function ( array $elements ) use ( &$clean ): array {
+			$out = array();
+			foreach ( $elements as $e ) {
+				unset( $e['_words'] );
+				if ( '_image' === ( $e['type'] ?? '' ) ) {
+					$e = array(
+						'type'   => 'image',
+						'aspect' => $e['aspect'],
+						'alt'    => $e['alt'],
+					);
+				}
+				if ( 'group' === ( $e['type'] ?? '' ) ) {
+					$e['elements'] = $clean( (array) $e['elements'] );
+				}
+				$out[] = $e;
+			}
+			return $out;
+		};
+		foreach ( (array) ( $doc['sections'] ?? array() ) as $i => $section ) {
+			$doc['sections'][ $i ]['elements'] = $clean( (array) $section['elements'] );
+		}
+		return $doc;
 	}
 
 	/**
