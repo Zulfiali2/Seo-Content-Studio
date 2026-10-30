@@ -40,6 +40,7 @@ use AiSeoContentStudio\REST\ResearchController;
 use AiSeoContentStudio\REST\SettingsController;
 use AiSeoContentStudio\REST\StatusController;
 use AiSeoContentStudio\REST\UsageController;
+use AiSeoContentStudio\REST\WebsiteDesignController;
 use AiSeoContentStudio\REST\WebsiteStudioController;
 use AiSeoContentStudio\Research\CompetitorFetcher;
 use AiSeoContentStudio\Research\CostEstimates;
@@ -66,6 +67,8 @@ use AiSeoContentStudio\WebsiteStudio\Analysis\WebsiteAnalyzer;
 use AiSeoContentStudio\WebsiteStudio\Persistence\AnalysisRepository;
 use AiSeoContentStudio\WebsiteStudio\Persistence\AuditLog;
 use AiSeoContentStudio\WebsiteStudio\Persistence\BrandProfileRepository;
+use AiSeoContentStudio\WebsiteStudio\Cloner\CloneJob;
+use AiSeoContentStudio\WebsiteStudio\StudioServices;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -236,6 +239,13 @@ final class Plugin {
 	private CostEstimates $estimates;
 
 	/**
+	 * AI Website Studio services (built on first use).
+	 *
+	 * @var StudioServices
+	 */
+	private StudioServices $studio;
+
+	/**
 	 * Build the service graph.
 	 */
 	private function __construct() {
@@ -267,6 +277,7 @@ final class Plugin {
 		$this->versions   = new VersionStore( $this->projects );
 		$this->evaluator  = new Evaluator( $this->projects, new DeterministicChecks(), $this->settings );
 		$this->drafts     = new DraftWriter( $this->projects, $this->versions );
+		$this->studio     = new StudioServices();
 		$this->handlers   = array(
 			'research'          => new ResearchJob( $this->projects, $this->research, new CompetitorFetcher( $this->http ), $this->text, $this->settings ),
 			'brief'             => new BriefJob( $this->projects, $this->text, $this->settings ),
@@ -275,6 +286,7 @@ final class Plugin {
 			'optimize_analysis' => new OptimizeJobs( 'optimize_analysis', $this->projects, $this->text, $this->settings, $this->evaluator, $this->versions ),
 			'optimize_rewrite'  => new OptimizeJobs( 'optimize_rewrite', $this->projects, $this->text, $this->settings, $this->evaluator, $this->versions ),
 			'images'            => new ImageJob( $this->projects, $this->images, $this->media ),
+			CloneJob::TYPE      => new CloneJob( $this->projects, $this->text, $this->settings, $this->studio ),
 		);
 		// The job lock must outlive the slowest request a step can make (all retries included).
 		$job_ttl         = (int) $this->settings->get( 'ai.request_timeout' ) * ( 1 + (int) $this->settings->get( 'ai.max_retries' ) ) + 180;
@@ -399,5 +411,6 @@ final class Plugin {
 			new BrandProfileRepository(),
 			new AuditLog()
 		) )->register();
+		( new WebsiteDesignController( $this->studio, $this->projects, $this->jobs, new BrandProfileRepository(), $this->settings ) )->register();
 	}
 }

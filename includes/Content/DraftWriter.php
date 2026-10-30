@@ -175,7 +175,7 @@ class DraftWriter {
 			update_post_meta( $saved_id, self::META['faqs'], wp_slash( $faqs ) );
 		}
 
-		$this->syncSeoPlugins(
+		self::syncSeoPlugins(
 			$saved_id,
 			array(
 				'meta_title'       => (string) $content['meta']['meta_title'],
@@ -220,7 +220,7 @@ class DraftWriter {
 	 * @param int                   $post_id Draft.
 	 * @param array<string, string> $values  meta_title, meta_description, keyword.
 	 */
-	private function syncSeoPlugins( int $post_id, array $values ): void {
+	public static function syncSeoPlugins( int $post_id, array $values ): void {
 		$synced = get_post_meta( $post_id, self::META['seo_synced'], true );
 		$synced = is_array( $synced ) ? $synced : array();
 		$wrote  = false;

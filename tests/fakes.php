@@ -160,3 +160,34 @@ function update_option( $name, $value, $autoload = null ) {
 	$GLOBALS['fake_options'][ $name ] = $value;
 	return true;
 }
+
+/** Post meta and post fields for cloner tests. */
+$GLOBALS['fake_meta'] = array();
+function get_post_meta( $id, $key = '', $single = false ) {
+	return $GLOBALS['fake_meta'][ (int) $id ][ $key ] ?? '';
+}
+function update_post_meta( $id, $key, $value ) {
+	$GLOBALS['fake_meta'][ (int) $id ][ $key ] = $value;
+	return true;
+}
+function get_post_field( $field, $id ) {
+	return FakeSite::$posts[ (int) $id ]->$field ?? '';
+}
+function get_post_thumbnail_id( $post ) {
+	return (int) ( $GLOBALS['fake_meta'][ is_object( $post ) ? $post->ID : (int) $post ]['_thumbnail_id'] ?? 0 );
+}
+function get_the_title( $post ) {
+	return is_object( $post ) ? (string) ( $post->post_title ?? '' ) : '';
+}
+function wp_slash( $value ) {
+	return $value;
+}
+
+#[\AllowDynamicProperties]
+final class WP_Post {
+	public function __construct( array $fields = array() ) {
+		foreach ( $fields as $k => $v ) {
+			$this->$k = $v;
+		}
+	}
+}

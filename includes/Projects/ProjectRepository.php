@@ -36,10 +36,14 @@ class ProjectRepository {
 		'optimization' => '_aiscs_optimization',
 		'images'       => '_aiscs_images',
 		'job'          => '_aiscs_job',
+		'studio'       => '_aiscs_studio',
 	);
 
 	/** Workflow stage meta key. */
 	public const STAGE_META = '_aiscs_stage';
+
+	/** Marks projects owned by AI Website Studio; they are left out of the content project list. */
+	public const KIND_META = '_aiscs_kind';
 
 	/**
 	 * Register the post type (hooked to init).
@@ -219,6 +223,13 @@ class ProjectRepository {
 		if ( ! user_can( $user_id, Capabilities::MANAGE ) ) {
 			$args['author'] = $user_id;
 		}
+		// AI Website Studio projects have their own screens.
+		$args['meta_query'] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- small private post type.
+			array(
+				'key'     => self::KIND_META,
+				'compare' => 'NOT EXISTS',
+			),
+		);
 		$query = new \WP_Query( $args );
 		$items = array();
 		foreach ( $query->posts as $post ) {
