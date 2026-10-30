@@ -18,12 +18,16 @@ defined( 'ABSPATH' ) || exit;
  *   atomic (Elementor 4) elements allowed, settings kept as the author made them; still checks
  *   structure, IDs, links and media and flags widgets the site cannot render.
  *
+ * - MODE_CONVERTED (HTML conversion): as generated, plus the HTML widget for the fallback
+ *   elements the user chose to keep; its content must still carry no executable markup.
+ *
  * Errors block saving; warnings are reported to the user.
  */
 final class DocumentValidator {
 
 	public const MODE_GENERATED = 'generated';
 	public const MODE_CLONED    = 'cloned';
+	public const MODE_CONVERTED = 'converted';
 
 	public const MAX_ELEMENTS = 3000;
 	public const MAX_DEPTH    = 30;
@@ -145,7 +149,8 @@ final class DocumentValidator {
 
 		$type   = is_string( $node['elType'] ?? null ) ? $node['elType'] : '';
 		$atomic = str_starts_with( $type, 'e-' );
-		$cloned = self::MODE_CLONED === $state['mode'];
+		$cloned    = self::MODE_CLONED === $state['mode'];
+		$converted = self::MODE_CONVERTED === $state['mode'];
 
 		if ( $atomic ) {
 			if ( ! $cloned ) {
@@ -184,7 +189,7 @@ final class DocumentValidator {
 			$widget = $node['widgetType'] ?? null;
 			if ( ! is_string( $widget ) || ! preg_match( '/^[a-z0-9][a-z0-9_.-]{0,63}$/', $widget ) ) {
 				$state['errors'][] = "$path has an invalid widget type.";
-			} elseif ( ! $cloned && ! $this->compat->has( $widget ) ) {
+			} elseif ( ! $cloned && ( ! $this->compat->has( $widget ) || ( ! $converted && in_array( $widget, ElementorCompat::FALLBACK_WIDGETS, true ) ) ) ) {
 				$state['errors'][] = "$path uses the \"$widget\" widget, which cannot be generated on this site.";
 			} elseif ( $cloned && array() !== $this->compat->widgets && ! in_array( $widget, $this->compat->widgets, true ) ) {
 				$state['warnings'][] = "The \"$widget\" widget is not available on this site (for example an Elementor Pro widget while Pro is inactive); it will not display until it is.";
@@ -286,6 +291,7 @@ final class DocumentValidator {
 			'image'       => 'image',
 			'icon-list'   => 'icon_list',
 			'accordion'   => 'tabs',
+			'html'        => 'html',
 		);
 		$key = $required[ $widget ] ?? null;
 		if ( null !== $key && ( ! isset( $settings[ $key ] ) || '' === $settings[ $key ] || array() === $settings[ $key ] ) ) {
@@ -293,6 +299,9 @@ final class DocumentValidator {
 		}
 		if ( 'heading' === $widget && isset( $settings['header_size'] ) && ! in_array( $settings['header_size'], array( 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div', 'span', 'p' ), true ) ) {
 			$state['errors'][] = "$path has an invalid heading level.";
+		}
+		if ( 'video' === $widget && '' === PageDocument::videoProvider( (string) ( $settings['youtube_url'] ?? $settings['vimeo_url'] ?? '' ) ) ) {
+			$state['errors'][] = "$path (video) needs a YouTube or Vimeo address.";
 		}
 		foreach ( array( 'icon_list', 'tabs' ) as $repeater ) {
 			foreach ( (array) ( $settings[ $repeater ] ?? array() ) as $item ) {

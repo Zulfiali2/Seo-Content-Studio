@@ -15,6 +15,8 @@ use AiSeoContentStudio\Settings\SettingsRepository;
 use AiSeoContentStudio\Support\Sanitize;
 use AiSeoContentStudio\WebsiteStudio\Analysis\PageCatalog;
 use AiSeoContentStudio\WebsiteStudio\Cloner\CloneJob;
+use AiSeoContentStudio\WebsiteStudio\Converter\HtmlConverter;
+use AiSeoContentStudio\WebsiteStudio\Engine\DocumentValidator;
 use AiSeoContentStudio\WebsiteStudio\Engine\DraftException;
 use AiSeoContentStudio\WebsiteStudio\Engine\DraftManager;
 use AiSeoContentStudio\WebsiteStudio\Engine\PageDocument;
@@ -175,6 +177,64 @@ class WebsiteDesignController extends RestController {
 						'type'     => 'object',
 						'required' => true,
 					),
+					'profile_id' => array(
+						'type'    => 'integer',
+						'minimum' => 0,
+						'default' => 0,
+					),
+				),
+			)
+		);
+		$html_args = array(
+			'html'           => array(
+				'type'      => 'string',
+				'required'  => true,
+				'maxLength' => HtmlConverter::MAX_HTML_BYTES,
+			),
+			'css'            => array(
+				'type'      => 'string',
+				'default'   => '',
+				'maxLength' => HtmlConverter::MAX_CSS_BYTES,
+			),
+			'js'             => array(
+				'type'      => 'string',
+				'default'   => '',
+				'maxLength' => 524288,
+			),
+			'base_url'       => array(
+				'type'      => 'string',
+				'default'   => '',
+				'maxLength' => 500,
+			),
+			'fallback'       => array(
+				'type'    => 'string',
+				'enum'    => array( 'skip', 'html' ),
+				'default' => 'skip',
+			),
+			'include_chrome' => array(
+				'type'    => 'boolean',
+				'default' => false,
+			),
+			'title'          => $text( 200 ),
+		);
+		register_rest_route(
+			self::NAMESPACE,
+			'/design/html/parse',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'parseHtml' ),
+				'permission_callback' => array( $this, 'canGenerate' ),
+				'args'                => $html_args,
+			)
+		);
+		register_rest_route(
+			self::NAMESPACE,
+			'/design/html/convert',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'convertHtml' ),
+				'permission_callback' => array( $this, 'canGenerate' ),
+				'args'                => $html_args + array(
 					'profile_id' => array(
 						'type'    => 'integer',
 						'minimum' => 0,
@@ -391,6 +451,84 @@ class WebsiteDesignController extends RestController {
 				)
 			);
 			return new \WP_REST_Response( $result, 201 );
+		} catch ( DraftException $e ) {
+			return self::draftError( $e );
+		}
+	}
+
+	/**
+	 * Run the converter on a request.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return array{document: array<string, mixed>, errors: string[], tokens: array<string, mixed>, report: array<string, mixed>}
+	 */
+	private function runConverter( \WP_REST_Request $request ): array {
+		return ( new HtmlConverter() )->convert(
+			(string) $request->get_param( 'html' ),
+			(string) $request->get_param( 'css' ),
+			(string) $request->get_param( 'js' ),
+			array(
+				'fallback'       => (string) $request->get_param( 'fallback' ),
+				'base_url'       => esc_url_raw( (string) $request->get_param( 'base_url' ), array( 'http', 'https' ) ),
+				'title'          => Sanitize::text( $request->get_param( 'title' ), 200 ),
+				'include_chrome' => (bool) $request->get_param( 'include_chrome' ),
+			)
+		);
+	}
+
+	/**
+	 * POST /design/html/parse: analyse only (nothing is saved).
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 */
+	public function parseHtml( \WP_REST_Request $request ): \WP_REST_Response {
+		$result = $this->runConverter( $request );
+		return new \WP_REST_Response(
+			array(
+				'document' => $result['document'],
+				'errors'   => array_slice( $result['errors'], 0, 30 ),
+				'report'   => $result['report'],
+				'tokens'   => $result['tokens'],
+			)
+		);
+	}
+
+	/**
+	 * POST /design/html/convert: convert and save as a new Elementor draft.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 */
+	public function convertHtml( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$user    = get_current_user_id();
+		$profile = (int) $request->get_param( 'profile_id' );
+		if ( $profile > 0 && ! $this->profiles->canAccess( $profile, $user ) ) {
+			return $this->forbidden();
+		}
+		$result = $this->runConverter( $request );
+		if ( array() !== $result['errors'] ) {
+			return new \WP_Error(
+				'aiscs_conversion_failed',
+				__( 'The HTML could not be converted.', 'ai-seo-content-studio' ),
+				array(
+					'status' => 422,
+					'errors' => array_slice( $result['errors'], 0, 30 ),
+				)
+			);
+		}
+		// The chosen brand profile styles the page; otherwise the page's own CSS does.
+		$tokens = $profile > 0 ? (array) ( $this->profiles->get( $profile )['tokens'] ?? array() ) : $result['tokens'];
+		try {
+			$built = $this->studio->builder()->build(
+				$result['document'],
+				$tokens,
+				array(
+					'user_id'         => $user,
+					'profile_id'      => $profile,
+					'generation_type' => 'converted',
+				),
+				DocumentValidator::MODE_CONVERTED
+			);
+			return new \WP_REST_Response( $built + array( 'report' => $result['report'] ), 201 );
 		} catch ( DraftException $e ) {
 			return self::draftError( $e );
 		}

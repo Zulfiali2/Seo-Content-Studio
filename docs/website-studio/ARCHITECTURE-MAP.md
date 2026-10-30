@@ -59,7 +59,7 @@ Baseline audited: **AI SEO Content Studio 1.6.8**, the uploaded ZIP. The brief n
 | 1 | Studio menu, page selector, Website Analyzer, Brand Extractor, brand profiles | **Done (1.7.0)**, verified by unit tests only (no live WordPress run) |
 | 2 | Page cloner (new draft, new widget IDs, content replacement, original untouched) | **Done (1.8.0)**, unit tests only |
 | 3 | Normalized design schema + Elementor mapper + document validator | **Done (1.8.0)**, unit tests only |
-| 4 | HTML/CSS → Elementor (reuses `CssParser`) | Not started |
+| 4 | HTML/CSS → Elementor (reuses `CssParser`) | **Done (1.9.0-beta.1)**, unit tests only |
 | 5 | Screenshot → design (vision) | Not started |
 | 6 | Content-to-design generation, section images, internal links | Not started |
 | 7 | Consistency checker, accessibility checker, section regeneration, preview, revisions, design library | Not started |
@@ -104,3 +104,19 @@ Element settings were checked against the Elementor 4.0.8 source:
 - Containers: `content_width`, `boxed_width`, `width` (with the `custom` unit), `flex_direction`, `flex_wrap`, `flex_gap` (GAPS), `flex_align_items`, `min_height`, `padding*`, `background_*`, `border_radius`, `box_shadow_box_shadow*`.
 - Widgets: heading `title/header_size/title_color/typography_*`; button `text/link/background_*/button_text_color/border_*/text_padding`; accordion `tabs/tab_title/tab_content/faq_schema`; icon-list `icon_list`; image `image/image_size/caption_source/image_border_radius`; spacer `space`.
 - Legacy layout: section `layout/content_width/height`, column `_column_size/_inline_size*`.
+
+## 7. Phase 4 design (implemented in 1.9.0-beta.1)
+
+```
+HTML + CSS (+ JS, analysed only)
+  └─ HtmlConverter
+       ├─ DOMDocument (LIBXML_NONET) → strip scripts, templates, links, meta, base, on* attributes
+       ├─ StyleResolver(CssParser rules + <style> blocks) + SelectorMatcher → own()/computed() per device
+       ├─ sections → findRow (flex/grid) → columns per device → groups (cards) / split
+       ├─ leaves → heading | text (p/ul/ol/table/inline) | button | image | video | accordion | icon | divider | html (fallback)
+       ├─ readability fix (contrast < 3:1) + report
+       └─ PageDocument::normalize(allow_html)
+  └─ tokens: CssStyleAnalyzer + BrandExtractor on the same CSS (when no brand profile is chosen)
+  └─ PageBuilder::build(MODE_CONVERTED) → ElementorMapper (element styles, video, html, background image)
+       → DocumentValidator(MODE_CONVERTED) → DraftManager::create
+```

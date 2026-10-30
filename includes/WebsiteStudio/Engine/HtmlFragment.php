@@ -21,7 +21,15 @@ defined( 'ABSPATH' ) || exit;
  */
 final class HtmlFragment {
 
-	private const ALLOWED = array( 'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'blockquote', 'code', 'h3', 'h4', 'a' );
+	private const ALLOWED = array( 'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'blockquote', 'code', 'h3', 'h4', 'a', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption' );
+
+	/** Extra elements kept in fallback mode (HTML widget of the converter). */
+	private const FALLBACK = array( 'div', 'span', 'section', 'article', 'figure', 'figcaption', 'img', 'h1', 'h2', 'h5', 'h6', 'small', 'sup', 'sub', 'mark', 'hr', 'dl', 'dt', 'dd', 'pre', 'address' );
+
+	/** Inline style properties kept in fallback mode. */
+	private const FALLBACK_STYLE = array( 'color', 'background-color', 'font-size', 'font-weight', 'font-style', 'text-align', 'line-height', 'padding', 'margin', 'border', 'border-radius', 'width', 'max-width', 'height', 'display', 'gap', 'flex-direction', 'justify-content', 'align-items', 'flex-wrap' );
+
+	private static bool $fallback = false;
 
 	private const DROP = array( 'script', 'style', 'iframe', 'object', 'embed', 'template', 'noscript', 'svg', 'math', 'form', 'input', 'button', 'select', 'textarea', 'link', 'meta', 'head', 'title' );
 
@@ -30,9 +38,11 @@ final class HtmlFragment {
 	/**
 	 * Sanitise.
 	 *
-	 * @param string $html Untrusted HTML.
+	 * @param string $html     Untrusted HTML.
+	 * @param bool   $fallback Fallback mode: also keep layout elements, images and safe inline styles.
 	 */
-	public static function clean( string $html ): string {
+	public static function clean( string $html, bool $fallback = false ): string {
+		self::$fallback = $fallback;
 		$html = trim( mb_substr( $html, 0, self::MAX_LENGTH * 2 ) );
 		if ( '' === $html ) {
 			return '';
@@ -56,7 +66,7 @@ final class HtmlFragment {
 		}
 		$out = trim( self::children( $root ) );
 		// Bare text becomes a paragraph, so the Text Editor widget gets block content.
-		if ( '' !== $out && ! preg_match( '/^<(p|ul|ol|blockquote|h3|h4)\b/', $out ) ) {
+		if ( '' !== $out && ! $fallback && ! preg_match( '/^<(p|ul|ol|blockquote|h3|h4|table)\b/', $out ) ) {
 			$out = '<p>' . $out . '</p>';
 		}
 		$out = mb_substr( $out, 0, self::MAX_LENGTH );
@@ -106,6 +116,16 @@ final class HtmlFragment {
 			return '';
 		}
 		$inner = self::children( $node );
+		if ( self::$fallback && in_array( $tag, self::FALLBACK, true ) ) {
+			if ( 'img' === $tag ) {
+				$src = self::url( $node->getAttribute( 'src' ) );
+				return preg_match( '#^https?://#i', $src ) ? '<img src="' . htmlspecialchars( $src, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) . '" alt="' . htmlspecialchars( $node->getAttribute( 'alt' ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ) . '">' : '';
+			}
+			if ( 'hr' === $tag ) {
+				return '<hr>';
+			}
+			return "<$tag" . self::style( $node ) . ">$inner</$tag>";
+		}
 		if ( ! in_array( $tag, self::ALLOWED, true ) ) {
 			// Unwrap; block-level wrappers keep a paragraph break.
 			return in_array( $tag, array( 'div', 'section', 'article', 'header', 'footer', 'h1', 'h2', 'h5', 'h6' ), true ) && '' !== trim( $inner ) ? '<p>' . $inner . '</p>' : $inner;
@@ -117,7 +137,38 @@ final class HtmlFragment {
 			$href = self::url( $node->getAttribute( 'href' ) );
 			return '' === $href ? $inner : '<a href="' . htmlspecialchars( $href, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) . '">' . $inner . '</a>';
 		}
-		return '' === trim( $inner ) && 'li' !== $tag ? '' : "<$tag>$inner</$tag>";
+		if ( in_array( $tag, array( 'th', 'td' ), true ) ) {
+			$span = '';
+			foreach ( array( 'colspan', 'rowspan' ) as $attr ) {
+				$n = (int) $node->getAttribute( $attr );
+				if ( $n > 1 && $n <= 50 ) {
+					$span .= " $attr=\"$n\"";
+				}
+			}
+			return "<$tag$span>$inner</$tag>";
+		}
+		if ( in_array( $tag, array( 'table', 'thead', 'tbody', 'tfoot', 'tr' ), true ) ) {
+			return "<$tag>$inner</$tag>";
+		}
+		return '' === trim( $inner ) && 'li' !== $tag ? '' : "<$tag" . ( self::$fallback ? self::style( $node ) : '' ) . ">$inner</$tag>";
+	}
+
+	/**
+	 * Safe inline style attribute (fallback mode only).
+	 *
+	 * @param \DOMElement $node Element.
+	 */
+	private static function style( \DOMElement $node ): string {
+		if ( ! self::$fallback || '' === $node->getAttribute( 'style' ) ) {
+			return '';
+		}
+		$keep = array();
+		foreach ( \AiSeoContentStudio\WebsiteStudio\Css\CssParser::declarations( $node->getAttribute( 'style' ) ) as $prop => $value ) {
+			if ( in_array( $prop, self::FALLBACK_STYLE, true ) && preg_match( '/^[#a-zA-Z0-9.,%() \/-]{1,120}$/', $value ) && ! preg_match( '/url|expression|javascript|@import|\\\\/i', $value ) ) {
+				$keep[] = "$prop: $value";
+			}
+		}
+		return array() === $keep ? '' : ' style="' . htmlspecialchars( implode( '; ', $keep ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ) . '"';
 	}
 
 	/**

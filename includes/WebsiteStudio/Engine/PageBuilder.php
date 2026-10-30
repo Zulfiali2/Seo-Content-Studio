@@ -54,12 +54,15 @@ class PageBuilder {
 	 * @param mixed                $input  Document.
 	 * @param array<string, mixed> $tokens Brand tokens (already access-checked by the caller).
 	 * @param array<string, mixed> $args   DraftManager args (user_id, profile_id, project_id, generation_type, ...).
+	 * @param string               $mode   DocumentValidator::MODE_GENERATED, or MODE_CONVERTED for HTML conversion
+	 *                                     (allows the "html" fallback element and widget).
 	 * @return array<string, mixed> DraftManager result plus notes and section_map.
 	 * @throws DraftException When the document is invalid or saving fails.
 	 */
-	public function build( mixed $input, array $tokens, array $args ): array {
+	public function build( mixed $input, array $tokens, array $args, string $mode = DocumentValidator::MODE_GENERATED ): array {
+		$mode   = DocumentValidator::MODE_CONVERTED === $mode ? $mode : DocumentValidator::MODE_GENERATED;
 		$errors = array();
-		$doc    = PageDocument::normalize( $input, $errors );
+		$doc    = PageDocument::normalize( $input, $errors, DocumentValidator::MODE_CONVERTED === $mode );
 		if ( array() !== $errors ) {
 			throw new DraftException( 'invalid_document', array_slice( $errors, 0, 30 ) );
 		}
@@ -72,7 +75,7 @@ class PageBuilder {
 				array(
 					'title'       => $doc['page']['title'],
 					'slug'        => $doc['page']['slug'],
-					'mode'        => DocumentValidator::MODE_GENERATED,
+					'mode'        => $mode,
 					'section_map' => $mapped['section_map'],
 					'document'    => $doc,
 					'notes'       => $mapped['notes'],

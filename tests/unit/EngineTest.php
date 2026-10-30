@@ -145,7 +145,7 @@ class EngineTest extends TestCase {
 			'page.title: required',
 			'page.slug: use lowercase letters, digits and hyphens',
 			'sections[0].elements[0].text: required',
-			'sections[0].elements[1].type: unknown element type',
+			'sections[0].elements[1].type: HTML elements are only allowed as a conversion fallback',
 			'sections[0].elements[2].url: not an allowed link',
 			'sections[1].id: duplicate id "a"',
 			'sections[1].type: unknown section type',

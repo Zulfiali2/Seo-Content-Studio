@@ -40,6 +40,13 @@ defined( 'ABSPATH' ) || exit;
  *           | {type: spacer,    height length}
  *           | {type: divider}
  *           | {type: group,     style {background, radius, shadow, padding}, elements[1–20] (no nested groups)}
+ *           | {type: video,     url (YouTube or Vimeo)}
+ *           | {type: html,      html (only with $allow_html: the controlled fallback of the HTML converter)}
+ *
+ * Optional per-element style (heading, text, button, image, icon, list): {color, background,
+ * font_family, font_weight, font_size {desktop, tablet, mobile}, line_height, padding, radius,
+ * border_color, border_width, align {tablet, mobile}}; each value passes the DesignTokens patterns.
+ * Optional section style.background_image: an http(s) image URL.
  *
  * Colours may be "#RRGGBB" or a token reference "token:<role>" (DesignTokens::COLOR_ROLES).
  * In split layouts every element is a group (exactly two). In grid layouts leading
@@ -51,7 +58,13 @@ final class PageDocument {
 
 	public const SECTION_TYPES = array( 'hero', 'features', 'cards', 'about', 'cta', 'faq', 'testimonials', 'contact', 'image_grid', 'statistics', 'content' );
 
-	public const ELEMENT_TYPES = array( 'heading', 'text', 'button', 'image', 'icon', 'list', 'accordion', 'spacer', 'divider', 'group' );
+	public const ELEMENT_TYPES = array( 'heading', 'text', 'button', 'image', 'icon', 'list', 'accordion', 'spacer', 'divider', 'group', 'video', 'html' );
+
+	/** Element types that accept a style override. */
+	public const STYLED_TYPES = array( 'heading', 'text', 'button', 'image', 'icon', 'list' );
+
+	/** Whether the "html" fallback element is accepted (HTML conversion with fallback enabled). */
+	private static bool $allowHtml = false;
 
 	/** Font Awesome 5 solid icons shipped with Elementor Free. */
 	public const ICONS = array( 'check', 'check-circle', 'star', 'heart', 'phone', 'envelope', 'map-marker-alt', 'clock', 'calendar-alt', 'user', 'users', 'briefcase', 'chart-line', 'chart-bar', 'cog', 'shield-alt', 'lock', 'lightbulb', 'rocket', 'thumbs-up', 'handshake', 'globe', 'home', 'building', 'truck', 'tools', 'leaf', 'graduation-cap', 'award', 'comments', 'question-circle', 'info-circle', 'arrow-right', 'calculator', 'file-alt', 'search', 'laptop', 'mobile-alt', 'wrench', 'paint-brush', 'camera', 'gift', 'shopping-cart', 'credit-card', 'money-bill-wave', 'percent', 'balance-scale', 'stethoscope', 'utensils', 'car' );
@@ -63,11 +76,13 @@ final class PageDocument {
 	/**
 	 * Validate and normalise.
 	 *
-	 * @param mixed    $input  Untrusted document.
-	 * @param string[] $errors Errors ("path: reason"); the document is usable only when empty.
+	 * @param mixed    $input      Untrusted document.
+	 * @param string[] $errors     Errors ("path: reason"); the document is usable only when empty.
+	 * @param bool     $allow_html Accept "html" fallback elements.
 	 * @return array<string, mixed>
 	 */
-	public static function normalize( mixed $input, array &$errors = array() ): array {
+	public static function normalize( mixed $input, array &$errors = array(), bool $allow_html = false ): array {
+		self::$allowHtml = $allow_html;
 		$out = array(
 			'schema_version' => self::VERSION,
 			'page'           => array(
@@ -171,7 +186,14 @@ final class PageDocument {
 			'background' => self::colorRef( $style['background'] ?? '', "$path.style.background", $errors ),
 			'text_color' => self::colorRef( $style['text_color'] ?? '', "$path.style.text_color", $errors ),
 			'padding'    => array(),
+			'background_image' => '',
 		);
+		$bg_image = is_string( $style['background_image'] ?? null ) ? HtmlFragment::url( $style['background_image'] ) : '';
+		if ( '' !== (string) ( $style['background_image'] ?? '' ) && ! preg_match( '#^https?://#i', $bg_image ) ) {
+			$errors[] = "$path.style.background_image: must be an http(s) image URL";
+		} else {
+			$clean_style['background_image'] = $bg_image;
+		}
 		foreach ( DesignTokens::DEVICES as $device ) {
 			$clean_style['padding'][ $device ] = self::token( $style['padding'][ $device ] ?? '', array( DesignTokens::class, 'box' ), "$path.style.padding.$device", $errors );
 		}
@@ -230,6 +252,55 @@ final class PageDocument {
 	 * @return array<string, mixed>|null
 	 */
 	private static function element( mixed $e, string $path, array &$errors, bool $allow_group ): ?array {
+		$clean = self::elementCore( $e, $path, $errors, $allow_group );
+		if ( null !== $clean && in_array( $clean['type'], self::STYLED_TYPES, true ) ) {
+			$clean['style'] = self::elementStyle( is_array( $e ) && is_array( $e['style'] ?? null ) ? $e['style'] : array(), "$path.style", $errors );
+		}
+		return $clean;
+	}
+
+	/**
+	 * Per-element style overrides.
+	 *
+	 * @param array<string, mixed> $st     Style.
+	 * @param string               $path   Path.
+	 * @param string[]             $errors Errors.
+	 * @return array<string, mixed>
+	 */
+	private static function elementStyle( array $st, string $path, array &$errors ): array {
+		$out = array(
+			'color'        => self::colorRef( $st['color'] ?? '', "$path.color", $errors ),
+			'background'   => self::colorRef( $st['background'] ?? '', "$path.background", $errors ),
+			'font_family'  => self::token( $st['font_family'] ?? '', array( DesignTokens::class, 'fontFamily' ), "$path.font_family", $errors ),
+			'font_weight'  => self::token( $st['font_weight'] ?? '', array( DesignTokens::class, 'fontWeight' ), "$path.font_weight", $errors ),
+			'font_size'    => array(),
+			'line_height'  => self::token( $st['line_height'] ?? '', array( DesignTokens::class, 'lineHeight' ), "$path.line_height", $errors ),
+			'padding'      => self::token( $st['padding'] ?? '', array( DesignTokens::class, 'box' ), "$path.padding", $errors ),
+			'radius'       => self::token( $st['radius'] ?? '', array( DesignTokens::class, 'box' ), "$path.radius", $errors ),
+			'border_color' => self::colorRef( $st['border_color'] ?? '', "$path.border_color", $errors ),
+			'border_width' => self::token( $st['border_width'] ?? '', array( DesignTokens::class, 'length' ), "$path.border_width", $errors ),
+			'align'        => array(),
+		);
+		foreach ( DesignTokens::DEVICES as $device ) {
+			$out['font_size'][ $device ] = self::token( $st['font_size'][ $device ] ?? '', array( DesignTokens::class, 'length' ), "$path.font_size.$device", $errors );
+		}
+		foreach ( array( 'tablet', 'mobile' ) as $device ) {
+			$a = $st['align'][ $device ] ?? '';
+			$out['align'][ $device ] = '' === $a ? '' : self::enum( $a, array( 'left', 'center', 'right' ), "$path.align.$device", $errors, '' );
+		}
+		return $out;
+	}
+
+	/**
+	 * One element without its style.
+	 *
+	 * @param mixed    $e           Element.
+	 * @param string   $path        Path.
+	 * @param string[] $errors      Errors.
+	 * @param bool     $allow_group Whether a group may appear here.
+	 * @return array<string, mixed>|null
+	 */
+	private static function elementCore( mixed $e, string $path, array &$errors, bool $allow_group ): ?array {
 		if ( ! is_array( $e ) ) {
 			$errors[] = "$path: must be an object";
 			return null;
@@ -239,7 +310,7 @@ final class PageDocument {
 			$errors[] = "$path.type: unknown element type";
 			return null;
 		}
-		$align = isset( $e['align'] ) ? self::enum( $e['align'], array( 'left', 'center', 'right' ), "$path.align", $errors, '' ) : '';
+		$align = isset( $e['align'] ) && '' !== $e['align'] ? self::enum( $e['align'], array( 'left', 'center', 'right' ), "$path.align", $errors, '' ) : '';
 
 		switch ( $type ) {
 			case 'heading':
@@ -353,6 +424,32 @@ final class PageDocument {
 			case 'divider':
 				return array( 'type' => 'divider' );
 
+			case 'video':
+				$url = HtmlFragment::url( (string) ( is_scalar( $e['url'] ?? null ) ? $e['url'] : '' ) );
+				$provider = self::videoProvider( $url );
+				if ( '' === $provider ) {
+					$errors[] = "$path.url: a YouTube or Vimeo address is required";
+				}
+				return array(
+					'type'     => 'video',
+					'url'      => $url,
+					'provider' => $provider,
+				);
+
+			case 'html':
+				if ( ! self::$allowHtml ) {
+					$errors[] = "$path.type: HTML elements are only allowed as a conversion fallback";
+					return null;
+				}
+				$html = HtmlFragment::clean( (string) ( is_scalar( $e['html'] ?? null ) ? $e['html'] : '' ), true );
+				if ( '' === trim( $html ) ) {
+					$errors[] = "$path.html: required";
+				}
+				return array(
+					'type' => 'html',
+					'html' => $html,
+				);
+
 			case 'group':
 				if ( ! $allow_group ) {
 					$errors[] = "$path: groups cannot be nested";
@@ -382,6 +479,21 @@ final class PageDocument {
 				);
 		}
 		return null;
+	}
+
+	/**
+	 * youtube | vimeo | "" for a video URL.
+	 *
+	 * @param string $url URL.
+	 */
+	public static function videoProvider( string $url ): string {
+		if ( preg_match( '#^https://(www\.)?(youtube\.com/(watch\?v=|embed/|shorts/)|youtu\.be/)[A-Za-z0-9_-]{6,20}#', $url ) ) {
+			return 'youtube';
+		}
+		if ( preg_match( '#^https://(www\.|player\.)?vimeo\.com/(video/)?\d{5,12}#', $url ) ) {
+			return 'vimeo';
+		}
+		return '';
 	}
 
 	/**

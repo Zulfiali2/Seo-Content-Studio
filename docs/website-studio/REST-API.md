@@ -183,3 +183,53 @@ Pages the studio created that the user can still edit: `{ items: [ { page_id, ti
 | Element types | `heading` (`text` ≤300, `level` h1–h6), `text` (`html`, sanitised to p/br/strong/b/em/i/u/ul/ol/li/blockquote/code/h3/h4/a), `button` (`text` ≤80, `url`, `variant` primary\|secondary), `image` (`attachment_id` and/or http(s) `url`, `alt`, `caption`), `icon` (one of `/design/capabilities` → `icons`), `list` (`items` ≤30), `accordion` (`items` ≤30 `{title, html}`), `spacer` (`height`), `divider`, `group` (`style.background/radius/shadow/padding`) |
 | Colours | `#RRGGBB`, or `token:<role>` (primary, secondary, accent, text, heading, background, surface, border) resolved from the brand profile |
 | Links | http(s), mailto, tel, `/relative`, `#fragment` only |
+
+
+---
+
+# Phase 4: HTML/CSS to Elementor (1.9.0-beta.1)
+
+## POST /design/html/parse
+
+Body:
+
+| Field | Rules |
+|---|---|
+| `html`* | ≤1 MB, fragment or full document |
+| `css` | ≤1 MB |
+| `js` | ≤512 KB; analysed only, never run |
+| `base_url` | http(s); used to resolve relative links and images |
+| `fallback` | `skip` (default) or `html` |
+| `include_chrome` | boolean; convert header/nav/footer as content |
+| `title` | page title |
+
+Analyses only; nothing is saved. Returns `{ document: PageDocument, errors: [], report, tokens }`.
+
+`report`:
+
+```json
+{ "coverage": 81, "converted_elements": 21,
+  "stats": { "sections": 6, "elements": { "heading": 8, "group": 5, "button": 3, ... } },
+  "unsupported": [ { "tag": "form", "category": "form|svg|canvas|media|embed|iframe|interactive|image_url|icon|no_native_widget", "text": "…", "fallback": false } ],
+  "skipped": [ { "tag": "header", "reason": "site_chrome", "text": "…" } ],
+  "fallbacks": 1, "scripts_removed": 1,
+  "javascript": { "bytes": 77, "executed": false, "features": ["event_listeners", "sliders"], "inline_handlers_removed": 1 },
+  "external_stylesheets": ["https://…/theme.css"], "relative_urls": ["images/x.png"],
+  "approximations": ["gradient_as_colour", "complex_shadow", "contrast_fixed"],
+  "css": { "unsupported_selectors": 2, "unsupported_features": ["position"] }, "truncated": false }
+```
+
+`tokens` holds the brand tokens extracted from the HTML's own CSS.
+
+## POST /design/html/convert
+
+Same body as `parse`, plus `profile_id` (optional, must be the user's own). Converts the HTML and saves it as a new draft (validator mode `converted`), styled with the brand profile or, without one, with the HTML's own CSS.
+
+Returns 201 with the draft result and the report. Returns 422 when the HTML cannot be converted.
+
+## PageDocument additions (still schema version 1, all optional)
+
+- Element `style` (heading, text, button, image, icon, list): `{ color, background, font_family, font_weight, font_size: {desktop, tablet, mobile}, line_height, padding, radius, border_color, border_width, align: {tablet, mobile} }`.
+- Section `style.background_image`: an http(s) image URL.
+- `{ "type": "video", "url": "https://www.youtube.com/watch?v=…" | "https://vimeo.com/…" }`.
+- `{ "type": "html", "html": "…" }`: accepted only by the converter's fallback (validator mode `converted`), and sanitised to allow-listed tags and safe inline styles.

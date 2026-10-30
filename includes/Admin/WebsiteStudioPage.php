@@ -52,6 +52,7 @@ class WebsiteStudioPage {
 			'brand'     => __( 'Website Brand Analyzer', 'ai-seo-content-studio' ),
 			'profiles'  => __( 'Brand Profiles', 'ai-seo-content-studio' ),
 			'clone'     => __( 'Clone Existing Page', 'ai-seo-content-studio' ),
+			'html'      => __( 'HTML to Elementor', 'ai-seo-content-studio' ),
 			'pages'     => __( 'Generated Pages', 'ai-seo-content-studio' ),
 		);
 	}

@@ -52,3 +52,8 @@
 .aiscs-studio__steps .components-spinner { margin: 0 0 0 8px; vertical-align: middle; }
 .aiscs-studio__done { border-left: 4px solid #00a32a; }
 .aiscs-studio__code textarea { font-family: Menlo, Consolas, monospace; font-size: 12px; }
+.aiscs-studio__file { display: inline-flex; flex-direction: column; gap: 4px; font-weight: 600; }
+.aiscs-studio__file input { font-weight: 400; }
+.aiscs-studio__frame-wrap { overflow-x: auto; background: #f0f0f1; border: 1px solid #dcdcde; border-radius: 4px; padding: 12px; }
+.aiscs-studio__frame { display: block; height: 640px; margin: 0 auto; border: 0; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15); max-width: none; }
+.aiscs-studio__list-plain { list-style: disc; margin-left: 20px; }

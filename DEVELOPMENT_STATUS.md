@@ -1,6 +1,6 @@
 # Development status — AI Website Studio
 
-Last updated: 2026-10-30. Plugin version **1.8.0** (DB version 7). Target for the full studio: 1.9.0.
+Last updated: 2026-10-30. Plugin version **1.9.0-beta.1** (DB version 7). Target for the full studio: 1.9.0.
 
 ## Summary
 
@@ -20,7 +20,10 @@ Last updated: 2026-10-30. Plugin version **1.8.0** (DB version 7). Target for th
 | 2 | ContentSlots (rewrite vs protected text) | ✅ Implemented |
 | 2 | CloneContentGenerator (AI prompt and schema, answer validation) | ✅ Implemented |
 | 2 | PageCloner + CloneJob (background job) + Clone Existing Page screen | ✅ Implemented |
-| 4 | HTML/CSS → Elementor | ⏳ Not started (CssParser, HtmlFragment, PageDocument and the mapper are ready to reuse) |
+| 4 | SelectorMatcher + StyleResolver (CSS cascade per device) | ✅ Implemented (1.9.0-beta.1) |
+| 4 | HtmlConverter (structure, layout detection, native widget mapping, report, fallback) | ✅ Implemented |
+| 4 | Engine additions (element styles, video, html fallback, background image, converted mode) | ✅ Implemented |
+| 4 | REST `/design/html/parse`, `/design/html/convert` + HTML to Elementor screen (sandboxed preview) | ✅ Implemented |
 | 5 | Screenshot → design (vision) | ⏳ Not started |
 | 6 | AI page generator from a brief, section images, internal links | ⏳ Not started (it should output a PageDocument and reuse PageBuilder) |
 | 7 | Consistency, accessibility, section regeneration, preview, revisions, design library | ⏳ Not started (section maps are stored for regeneration; `DraftManager::update()` and `ElementorMapper::mapSection()` exist) |
@@ -33,11 +36,17 @@ Last updated: 2026-10-30. Plugin version **1.8.0** (DB version 7). Target for th
 | Workflow | Status |
 |---|---|
 | A: Existing page cloning (select → analyze → topic → SEO content → duplicate → replace → draft → open in Elementor) | Code complete; needs a live run (TESTING.md 13–15) |
-| B: HTML → Elementor | Phase 4 |
+| B: HTML → Elementor (paste → parse → native widgets → validate → preview → draft → edit) | Code complete; needs a live run (TESTING.md 18–20) |
 | C: Screenshot → Elementor | Phase 5 |
 | D: Brand consistency | Profiles done; checker in phase 7 |
 | E: Section regeneration | Phase 7 (foundations exist) |
 | F: Design library | Phase 7 |
+
+## Files changed in 1.9.0-beta.1
+
+New: `includes/WebsiteStudio/Converter/` (`SelectorMatcher`, `StyleResolver`, `HtmlConverter`), `tests/unit/ConverterTest.php`, `tests/fixtures/landing.html|css`.
+
+Changed: `Engine/PageDocument.php` (element styles, background image, video, html, idempotent align), `Engine/HtmlFragment.php` (tables, fallback mode), `Engine/ElementorMapper.php` (style overrides, video, html, background image), `Engine/ElementorCompat.php`, `Engine/DocumentValidator.php` (converted mode, video/html checks), `Engine/DraftManager.php`, `Engine/PageBuilder.php` (mode), `Persistence/GeneratedPageRepository.php` (`converted` type), `REST/WebsiteDesignController.php`, `Admin/WebsiteStudioPage.php`, `assets/website-studio/*`, docs.
 
 ## Files changed in 1.8.0
 
@@ -62,9 +71,19 @@ Changed:
 
 - `php -l` on every PHP file: no syntax errors (PHP 8.3).
 - `node --check assets/website-studio/studio.js`: OK.
-- `php tests/run.php`: **54 passed, 0 failed**.
+- `php tests/run.php`: **62 passed, 0 failed** (run three times in a row, deterministic).
+- Converter benchmark: a page with about 2,000 elements and 1,500 CSS rules converts in 0.12 s (12 MB peak).
 
 ## Known limitations
+
+0. **HTML conversion (phase 4)** approximates layouts. Converted:
+   - flex/grid rows become columns; absolute positioning, transforms and animations are reported and not converted;
+   - gradients become their first colour, and multi-layer shadows are dropped;
+   - `:hover` states, pseudo-elements and sibling selectors are not used;
+   - images stay at their external URLs (importing them into the Media Library comes with phase 6 media);
+   - forms, SVG and custom scripts need Elementor features or plugins, and the report says so.
+
+   Not claimed: pixel-perfect output.
 
 1. **Not yet run in WordPress or Elementor.** This environment did not permit running the downloaded WordPress/Elementor code. Every Elementor setting key the mapper writes was checked against the Elementor 4.0.8 source. The live checklist (`docs/website-studio/TESTING.md`, items 1–17) is the next step and must pass before release.
 2. **Alignment values.** Elementor 4 uses `start`/`end` for heading, text, image and icon alignment, and maps the older `left`/`right` values (which the mapper writes, for 3.x compatibility). Pages render correctly, but Elementor 4's editor does not highlight a "right" alignment button.

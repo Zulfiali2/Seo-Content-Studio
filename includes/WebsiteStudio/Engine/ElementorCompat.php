@@ -17,12 +17,16 @@ defined( 'ABSPATH' ) || exit;
  * missing, so a page is never generated with widgets the site cannot render.
  *
  * Only Elementor Free widgets are ever emitted (heading, text-editor, button, image, icon,
- * icon-list, accordion, spacer, divider). Pro widgets are never generated.
+ * icon-list, accordion, spacer, divider, video, and the HTML widget as an opt-in conversion
+ * fallback). Pro widgets are never generated.
  */
 final class ElementorCompat {
 
 	/** Widgets the mapper can emit, all part of Elementor Free. */
-	public const FREE_WIDGETS = array( 'heading', 'text-editor', 'button', 'image', 'icon', 'icon-list', 'accordion', 'spacer', 'divider' );
+	public const FREE_WIDGETS = array( 'heading', 'text-editor', 'button', 'image', 'icon', 'icon-list', 'accordion', 'spacer', 'divider', 'video', 'html' );
+
+	/** Emitted only for HTML conversion with the fallback switched on. */
+	public const FALLBACK_WIDGETS = array( 'html' );
 
 	/** Oldest Elementor this engine targets (flexbox containers and the current control names). */
 	public const MIN_VERSION = '3.16.0';

@@ -156,7 +156,7 @@
 			[ __( 'Brand Profiles', T ), __( 'Available', T ), boot.urls.profiles ],
 			[ __( 'Clone Existing Page', T ), __( 'Available', T ), boot.urls.clone ],
 			[ __( 'Native Elementor engine and Generated Pages', T ), __( 'Available', T ), boot.urls.pages ],
-			[ __( 'HTML to Elementor', T ), __( 'Planned: phase 4', T ) ],
+			[ __( 'HTML to Elementor', T ), __( 'Available', T ), boot.urls.html ],
 			[ __( 'Image to Design', T ), __( 'Planned: phase 5', T ) ],
 			[ __( 'AI Page Generator, images and internal links', T ), __( 'Planned: phase 6', T ) ],
 			[ __( 'Consistency, accessibility, preview, revisions, design library', T ), __( 'Planned: phase 7', T ) ],
@@ -982,7 +982,7 @@
 				.finally( () => setBusy( false ) );
 		};
 
-		const TYPE_LABELS = { generated: __( 'Generated', T ), clone: __( 'Duplicate', T ), clone_generated: __( 'Clone + new content', T ) };
+		const TYPE_LABELS = { generated: __( 'Generated', T ), clone: __( 'Duplicate', T ), clone_generated: __( 'Clone + new content', T ), converted: __( 'From HTML', T ) };
 		return el(
 			Fragment,
 			null,
@@ -1039,6 +1039,240 @@
 		);
 	}
 
+	/* ---------------------------------------------------------- HTML to Elementor */
+
+	const UNSUPPORTED_LABELS = {
+		form: __( 'Form: forms need a form plugin or Elementor Pro; not converted', T ),
+		svg: __( 'SVG graphic: choose an Elementor icon or upload it as an image', T ),
+		canvas: __( 'Canvas drawing: not convertible', T ),
+		media: __( 'Self-hosted video/audio: add it with the Video widget', T ),
+		embed: __( 'Embedded object: not convertible', T ),
+		iframe: __( 'Embedded frame (only YouTube and Vimeo convert)', T ),
+		interactive: __( 'Interactive element: not convertible', T ),
+		image_url: __( 'Image without an absolute https address (set the base URL, or upload the image)', T ),
+		icon: __( 'Icon not in the available icon set', T ),
+		no_native_widget: __( 'No native widget', T ),
+	};
+
+	const APPROX_LABELS = {
+		gradient_as_colour: __( 'A gradient background was replaced by its first colour.', T ),
+		complex_shadow: __( 'A multi-layer shadow was not converted.', T ),
+		contrast_fixed: __( 'Text colours that would be unreadable on their background were changed.', T ),
+	};
+
+	const PREVIEW_WIDTHS = { desktop: 1200, tablet: 768, mobile: 375 };
+
+	/** Read a dropped/selected file into a field (never uploaded to the server as a file). */
+	function FileField( { label, accept, onLoad } ) {
+		return el(
+			'label',
+			{ className: 'aiscs-studio__file' },
+			el( 'span', null, label ),
+			el( 'input', {
+				type: 'file',
+				accept,
+				onChange: ( e ) => {
+					const file = e.target.files && e.target.files[ 0 ];
+					if ( ! file ) {
+						return;
+					}
+					if ( file.size > 1048576 ) {
+						onLoad( null, __( 'The file is larger than 1 MB.', T ) );
+						return;
+					}
+					const reader = new window.FileReader();
+					reader.onload = () => onLoad( String( reader.result || '' ), null );
+					reader.readAsText( file );
+				},
+			} )
+		);
+	}
+
+	/** Sandboxed preview of the source design: no scripts, no same-origin access. */
+	function SourcePreview( { html, css } ) {
+		const [ device, setDevice ] = useState( 'desktop' );
+		const doc = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' + css.replace( /<\/style/gi, '' ) + '</style></head><body>' + html.replace( /<script[\s\S]*?<\/script>/gi, '' ) + '</body></html>';
+		return el(
+			'div',
+			{ className: 'aiscs-studio__preview' },
+			el(
+				'div',
+				{ className: 'aiscs-studio__actions' },
+				Object.keys( PREVIEW_WIDTHS ).map( ( d ) => el( Button, { key: d, variant: d === device ? 'primary' : 'secondary', onClick: () => setDevice( d ) }, d + ' (' + PREVIEW_WIDTHS[ d ] + 'px)' ) )
+			),
+			el(
+				'div',
+				{ className: 'aiscs-studio__frame-wrap' },
+				el( 'iframe', { title: __( 'Source design preview', T ), sandbox: '', srcDoc: doc, style: { width: PREVIEW_WIDTHS[ device ] + 'px' }, className: 'aiscs-studio__frame' } )
+			),
+			el( 'p', { className: 'description' }, __( 'This preview shows your source HTML. Scripts are switched off in it.', T ) )
+		);
+	}
+
+	function ConversionReport( { result } ) {
+		const r = result.report || {};
+		const stats = r.stats || { sections: 0, elements: {} };
+		const doc = result.document || { sections: [] };
+		return el(
+			'div',
+			{ className: 'aiscs-studio__result' },
+			el( 'h2', null, sprintf( __( 'Conversion report: %d%% of the content converts to native widgets', T ), r.coverage || 0 ) ),
+			result.errors && result.errors.length ? el( Notice, { status: 'error', isDismissible: false }, el( 'ul', null, result.errors.map( ( e, i ) => el( 'li', { key: i }, e ) ) ) ) : null,
+			el(
+				'p',
+				null,
+				sprintf( __( '%d sections.', T ), stats.sections ),
+				' ',
+				Object.keys( stats.elements || {} )
+					.map( ( k ) => stats.elements[ k ] + ' ' + k )
+					.join( ', ' )
+			),
+			el(
+				'table',
+				{ className: 'widefat striped' },
+				el( 'thead', null, el( 'tr', null, el( 'th', null, '#' ), el( 'th', null, __( 'Section', T ) ), el( 'th', null, __( 'Layout', T ) ), el( 'th', null, __( 'Columns (desktop / tablet / mobile)', T ) ), el( 'th', null, __( 'Elements', T ) ) ) ),
+				el(
+					'tbody',
+					null,
+					doc.sections.map( ( s, i ) =>
+						el(
+							'tr',
+							{ key: s.id },
+							el( 'td', null, i + 1 ),
+							el( 'td', null, ( SECTION_LABELS[ s.type ] || s.type ) + ' (' + s.id + ')' ),
+							el( 'td', null, s.layout.kind ),
+							el( 'td', null, s.layout.columns.desktop + ' / ' + s.layout.columns.tablet + ' / ' + s.layout.columns.mobile ),
+							el( 'td', null, s.elements.map( ( e ) => ( 'group' === e.type ? __( 'card', T ) + '(' + e.elements.map( ( g ) => g.type ).join( ', ' ) + ')' : e.type ) ).join( ', ' ) )
+						)
+					)
+				)
+			),
+			( r.unsupported || [] ).length
+				? el(
+						'div',
+						null,
+						el( 'h3', null, __( 'Not converted to native widgets', T ) ),
+						el(
+							'ul',
+							{ className: 'aiscs-studio__list-plain' },
+							r.unsupported.map( ( u, i ) =>
+								el( 'li', { key: i }, el( 'code', null, '<' + u.tag + '>' ), ' ', UNSUPPORTED_LABELS[ u.category ] || u.category, u.fallback ? ' — ' + __( 'kept in an HTML widget', T ) : '', u.text ? ' — “' + u.text + '”' : '' )
+							)
+						)
+				  )
+				: null,
+			( r.skipped || [] ).length ? el( 'p', null, sprintf( __( 'Skipped site header/footer/navigation: %d (your theme provides them). Turn on "Include header and footer" to convert them as content.', T ), r.skipped.length ) ) : null,
+			r.scripts_removed || ( r.javascript && r.javascript.bytes ) || ( r.javascript && r.javascript.inline_handlers_removed )
+				? el(
+						Notice,
+						{ status: 'info', isDismissible: false },
+						sprintf( __( 'JavaScript is never run or copied: %1$d script tags and %2$d inline event handlers were removed.', T ), r.scripts_removed || 0, ( r.javascript && r.javascript.inline_handlers_removed ) || 0 ),
+						r.javascript && r.javascript.features && r.javascript.features.length ? ' ' + sprintf( __( 'The JavaScript provided uses: %s. Recreate that behaviour with Elementor features (for example Motion Effects or the Image Carousel widget).', T ), r.javascript.features.join( ', ' ) ) : ''
+				  )
+				: null,
+			( r.external_stylesheets || [] ).length ? el( Notice, { status: 'warning', isDismissible: false }, __( 'Linked stylesheets are not downloaded. Paste their CSS into the CSS field to include them:', T ), ' ', r.external_stylesheets.join( ', ' ) ) : null,
+			( r.relative_urls || [] ).length ? el( Notice, { status: 'warning', isDismissible: false }, __( 'Relative addresses could not be resolved (set the base URL):', T ), ' ', r.relative_urls.slice( 0, 10 ).join( ', ' ) ) : null,
+			( r.approximations || [] ).length ? el( Notice, { status: 'warning', isDismissible: false }, el( 'ul', null, Array.from( new Set( r.approximations ) ).map( ( a ) => el( 'li', { key: a }, APPROX_LABELS[ a ] || a ) ) ) ) : null,
+			r.css && ( r.css.unsupported_selectors || ( r.css.unsupported_features || [] ).length )
+				? el( 'p', { className: 'description' }, sprintf( __( 'CSS not used: %d selectors (hover states, pseudo-elements, sibling selectors).', T ), r.css.unsupported_selectors || 0 ), ( r.css.unsupported_features || [] ).length ? ' ' + sprintf( __( 'Features without an equivalent: %s.', T ), r.css.unsupported_features.join( ', ' ) ) : '' )
+				: null
+		);
+	}
+
+	function HtmlToElementor() {
+		const [ html, setHtml ] = useState( '' );
+		const [ css, setCss ] = useState( '' );
+		const [ js, setJs ] = useState( '' );
+		const [ opts, setOpts ] = useState( { base_url: '', fallback: false, include_chrome: false, title: '', profile_id: '0' } );
+		const [ profiles, setProfiles ] = useState( [] );
+		const [ result, setResult ] = useState( null );
+		const [ built, setBuilt ] = useState( null );
+		const [ busy, setBusy ] = useState( false );
+		const [ noticeView, setNotice ] = useNotice();
+
+		useEffect( () => {
+			apiFetch( { path: '/aiscs/v1/website/brand-profiles?page=1' } )
+				.then( ( r ) => setProfiles( r.items || [] ) )
+				.catch( () => setProfiles( [] ) );
+		}, [] );
+		const set = ( key ) => ( v ) => setOpts( Object.assign( {}, opts, { [ key ]: v } ) );
+		const payload = () => ( {
+			html,
+			css,
+			js,
+			base_url: opts.base_url,
+			fallback: opts.fallback ? 'html' : 'skip',
+			include_chrome: opts.include_chrome,
+			title: opts.title,
+			profile_id: parseInt( opts.profile_id, 10 ) || 0,
+		} );
+		const loaded = ( setter ) => ( text, error ) => ( error ? setNotice( { status: 'error', text: error } ) : setter( text ) );
+
+		const analyze = () => {
+			setBusy( true );
+			setBuilt( null );
+			const data = payload();
+			delete data.profile_id;
+			apiFetch( { path: '/aiscs/v1/design/html/parse', method: 'POST', data } )
+				.then( ( r ) => {
+					setResult( r );
+					setNotice( null );
+				} )
+				.catch( ( e ) => setNotice( { status: 'error', text: errorText( e ) } ) )
+				.finally( () => setBusy( false ) );
+		};
+		const convert = () => {
+			setBusy( true );
+			apiFetch( { path: '/aiscs/v1/design/html/convert', method: 'POST', data: payload() } )
+				.then( setBuilt )
+				.catch( ( e ) => setNotice( { status: 'error', text: errorText( e ) } ) )
+				.finally( () => setBusy( false ) );
+		};
+
+		if ( built ) {
+			return el( Fragment, null, el( DraftResult, { result: built } ), el( Button, { variant: 'link', onClick: () => setBuilt( null ) }, __( 'Back to the converter', T ) ) );
+		}
+		return el(
+			Fragment,
+			null,
+			noticeView,
+			el( 'p', { className: 'description' }, __( 'Paste or upload your HTML and CSS. The layout is rebuilt with native, editable Elementor widgets. Nothing in the code is run, and nothing is saved until you create the draft.', T ) ),
+			el(
+				'div',
+				{ className: 'aiscs-studio__actions' },
+				el( FileField, { label: __( 'HTML file', T ), accept: '.html,.htm,text/html', onLoad: loaded( setHtml ) } ),
+				el( FileField, { label: __( 'CSS file', T ), accept: '.css,text/css', onLoad: loaded( setCss ) } ),
+				el( FileField, { label: __( 'JavaScript file (analysed only)', T ), accept: '.js,text/javascript', onLoad: loaded( setJs ) } )
+			),
+			el( wp.components.TextareaControl, { label: __( 'HTML', T ), value: html, onChange: setHtml, rows: 12, className: 'aiscs-studio__code' } ),
+			el( wp.components.TextareaControl, { label: __( 'CSS', T ), value: css, onChange: setCss, rows: 10, className: 'aiscs-studio__code' } ),
+			el( 'details', { className: 'aiscs-studio__analysis' }, el( 'summary', null, __( 'JavaScript (optional, never run)', T ) ), el( wp.components.TextareaControl, { label: __( 'JavaScript', T ), value: js, onChange: setJs, rows: 6, className: 'aiscs-studio__code' } ) ),
+			el(
+				'div',
+				{ className: 'aiscs-studio__fields' },
+				el( TextControl, { label: __( 'Base URL for relative links and images', T ), value: opts.base_url, onChange: set( 'base_url' ), placeholder: 'https://example.com/', __nextHasNoMarginBottom: true } ),
+				el( TextControl, { label: __( 'Page title (optional)', T ), value: opts.title, onChange: set( 'title' ), __nextHasNoMarginBottom: true } ),
+				el( SelectControl, {
+					label: __( 'Styles', T ),
+					value: opts.profile_id,
+					options: [ { label: __( 'From this HTML’s own CSS', T ), value: '0' } ].concat( profiles.map( ( p ) => ( { label: sprintf( __( 'Brand profile: %s', T ), p.name ), value: String( p.id ) } ) ) ),
+					onChange: set( 'profile_id' ),
+					__nextHasNoMarginBottom: true,
+				} )
+			),
+			el( CheckboxControl, { label: __( 'Keep content that has no native widget in an HTML widget (sanitised; scripts are always removed)', T ), checked: opts.fallback, onChange: set( 'fallback' ), __nextHasNoMarginBottom: true } ),
+			el( CheckboxControl, { label: __( 'Include header, navigation and footer as page content', T ), checked: opts.include_chrome, onChange: set( 'include_chrome' ), __nextHasNoMarginBottom: true } ),
+			el(
+				'div',
+				{ className: 'aiscs-studio__actions' },
+				el( Button, { variant: 'secondary', isBusy: busy && ! result, disabled: busy || ! html.trim(), onClick: analyze }, __( 'Analyze', T ) ),
+				el( Button, { variant: 'primary', isBusy: busy && !! result, disabled: busy || ! result || ( result.errors && result.errors.length > 0 ), onClick: convert }, __( 'Create Elementor draft', T ) )
+			),
+			result ? el( SourcePreview, { html, css } ) : null,
+			result ? el( ConversionReport, { result } ) : null
+		);
+	}
+
 	/* ---------------------------------------------------------------------- Mount */
 
 	const VIEWS = {
@@ -1047,6 +1281,7 @@
 		profiles: [ __( 'Brand Profiles', T ), Profiles ],
 		clone: [ __( 'Clone Existing Page', T ), ClonePage ],
 		pages: [ __( 'Generated Pages', T ), GeneratedPages ],
+		html: [ __( 'HTML to Elementor', T ), HtmlToElementor ],
 	};
 
 	function App( { view } ) {

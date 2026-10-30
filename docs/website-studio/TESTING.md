@@ -18,6 +18,7 @@ php tests/run.php CssParser  # filter by class or method name
 | `DraftManagerTest` | New draft + ownership record, invalid documents never saved, permissions, rollback when Elementor rejects, original and published pages never overwritten, Elementor missing or too old |
 | `ClonerTest` | New ids for every element and repeater item with settings kept, slot detection and protection, apply only allowed slots, AI answer validation, end-to-end clone with the source untouched |
 | `CloneJobTest` | Full job run, selection rules, no repeated AI request or second draft on retry, access loss stops the job |
+| `ConverterTest` | Selector matcher (supported and unsupported selectors, specificity), cascade (inline, specificity, media per device, inheritance), a full landing page (sections, grid 3/2/1, split, buttons and variants, cards, icons, images, tables, YouTube, accordion, gradient and contrast fixes, fallback), the report, tokens from the page's CSS, untrusted input (scripts, handlers, `javascript:`, `data:`, unknown iframes, objects, unsafe inline styles), limits, and the converted save path |
 | `CredentialRotationTest` | Reading with the previous key, re-encryption, wrong previous key leaves data untouched |
 
 The persistence tests use an in-memory SQLite `wpdb` double (`tests/fakes.php`), which checks the repository SQL and the permission logic. They do not replace a run on MySQL/MariaDB.
@@ -51,3 +52,11 @@ The 1.7.0 and 1.8.0 code has **not yet been run inside WordPress**. Before relea
 15. Try to publish the generated page, then build/clone again: the published page is never changed (only new drafts appear).
 16. As an Editor: the clone plan of a page you cannot edit returns 403. `/design/jobs/{id}` of another user's job returns 403.
 17. Elementor Pro inactive on a page with Pro widgets: the plan warns, and the copy keeps them.
+
+### Phase 4 (1.9.0-beta.1), still to be checked on a real site
+
+18. HTML to Elementor: upload `tests/fixtures/landing.html` and `landing.css` from the source repository.
+    - Analyze: the report lists the form, SVG, relative image and skipped header/footer. The preview switches desktop, tablet and mobile widths.
+    - Create the draft and open it in Elementor: hero, 3-column cards (2 on tablet, 1 on mobile), the about split with the YouTube video, and the FAQ accordion. Everything can be edited.
+19. Repeat with "Keep content … in an HTML widget": the `<dl>` appears as an HTML widget and nothing else does.
+20. As an Editor without `unfiltered_html`, convert HTML containing `<script>` and `onerror=`: neither appears anywhere in the saved page (check the Elementor JSON with "Export Template").

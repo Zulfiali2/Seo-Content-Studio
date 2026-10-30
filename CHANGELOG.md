@@ -2,6 +2,30 @@
 
 All notable changes to AI SEO Content Studio. Versions follow semantic versioning.
 
+## 1.9.0-beta.1 — 2026-10-30 — AI Website Studio, phase 4: HTML/CSS to Elementor
+
+Added
+- **HTML to Elementor** screen: paste or upload HTML, CSS and (optionally) JavaScript. Files are read in the browser.
+  - Analyze: shows a conversion report and a sandboxed preview of the source (no scripts) at desktop, tablet and mobile widths.
+  - Create a draft built from native Elementor widgets.
+- **Converter**:
+  - Parses the HTML with DOMDocument (no network) and resolves the CSS cascade: specificity, source order, inline styles, inheritance and `@media` rules per device.
+  - Top-level blocks become sections. Site header, navigation and footer are skipped unless asked for.
+  - CSS grid and flex rows become card grids or two-column splits, with the column count per device read from `grid-template-columns`, `flex-direction` and child widths.
+  - Headings, paragraphs, lists and tables map to native widgets, and so do button-styled links, images and figures, YouTube/Vimeo embeds (Video widget), `<details>` (Accordion), `<hr>` and Font Awesome icons. Colours, fonts, per-device font sizes, alignment, padding, radius, borders and section backgrounds/images are kept.
+- **Conversion report**: what converted (coverage %), what did not and why (forms, SVG, canvas, other iframes, images without an absolute URL, unknown icons), skipped header/footer, removed scripts and inline handlers, JavaScript features found (never run), linked stylesheets (not downloaded), unresolved relative URLs, CSS selectors and features not used, and approximations (gradient → colour, multi-layer shadows, readability fixes).
+- **Controlled HTML widget fallback** (opt-in) for content without a native widget (`<dl>`, `<pre>`, `<address>`, …). It is sanitised: allow-listed tags, safe inline styles only, no scripts or event handlers. It is never the whole page.
+- Without a brand profile, the page is styled from its own CSS (fonts, colours, buttons, container width).
+- Unreadable text colours on a background (contrast below 3:1) are replaced with a readable colour, and this is reported.
+- Engine:
+  - Optional per-element style overrides in PageDocument (colour, background, font, per-device size, line height, padding, radius, border, per-device alignment), and section background images.
+  - New `video` element, and an `html` element allowed only in conversion mode.
+  - Validator mode `converted`; tables in rich text.
+- REST: `POST /design/html/parse` (analysis only) and `POST /design/html/convert` (new draft).
+
+Fixed
+- `PageDocument::normalize()` is now idempotent (an empty `align` written by normalisation is accepted again).
+
 ## 1.8.0 — 2026-10-30 — AI Website Studio, phases 2 and 3: page cloner and native Elementor engine
 
 Added

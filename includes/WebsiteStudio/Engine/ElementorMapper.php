@@ -168,6 +168,7 @@ final class ElementorMapper {
 		}
 		$this->padding( $settings, 'padding', $this->sectionPadding( $s['style']['padding'] ) );
 		$this->background( $settings, $this->resolveColor( $s['style']['background'] ) );
+		$this->backgroundImage( $settings, (string) ( $s['style']['background_image'] ?? '' ) );
 
 		$text_color = $this->resolveColor( $s['style']['text_color'] );
 		$children   = array();
@@ -277,6 +278,7 @@ final class ElementorMapper {
 			$settings['custom_height'] = self::slider( $layout['min_height'] );
 		}
 		$this->background( $settings, $this->resolveColor( $s['style']['background'] ) );
+		$this->backgroundImage( $settings, (string) ( $s['style']['background_image'] ?? '' ) );
 		$padding    = $this->sectionPadding( $s['style']['padding'] );
 		$text_color = $this->resolveColor( $s['style']['text_color'] );
 
@@ -386,6 +388,124 @@ final class ElementorMapper {
 	 * @return array<string, mixed>
 	 */
 	private function widget( array $e, string $text_color, string $align, string $type, bool $first ): array {
+		$widget = $this->widgetCore( $e, $text_color, $align, $type, $first );
+		if ( isset( $e['style'] ) && is_array( $e['style'] ) ) {
+			$this->applyStyle( $widget, $e['style'] );
+		}
+		return $widget;
+	}
+
+	/**
+	 * Apply an element's own style overrides to the widget built for it.
+	 *
+	 * @param array<string, mixed> $w     Widget element (modified).
+	 * @param array<string, mixed> $style PageDocument element style.
+	 */
+	private function applyStyle( array &$w, array $style ): void {
+		$type = (string) ( $w['widgetType'] ?? '' );
+		$s    = &$w['settings'];
+		$keys = array(
+			'heading'     => array( 'color' => 'title_color', 'typography' => 'typography' ),
+			'text-editor' => array( 'color' => 'text_color', 'typography' => 'typography' ),
+			'button'      => array( 'color' => 'button_text_color', 'typography' => 'typography' ),
+			'icon-list'   => array( 'color' => 'text_color', 'typography' => 'icon_typography' ),
+			'icon'        => array( 'color' => 'primary_color' ),
+			'image'       => array(),
+		)[ $type ] ?? null;
+		if ( null === $keys ) {
+			return; // A fallback replaced the element (for example a list rendered as text).
+		}
+		$color = $this->resolveColor( (string) ( $style['color'] ?? '' ) );
+		if ( '' !== $color && isset( $keys['color'] ) ) {
+			unset( $s['__globals__'][ $keys['color'] ] );
+			$this->color( $s, $keys['color'], $color );
+		}
+		if ( isset( $keys['typography'] ) ) {
+			$prefix = $keys['typography'];
+			$font   = array(
+				'family' => (string) ( $style['font_family'] ?? '' ),
+				'weight' => (string) ( $style['font_weight'] ?? '' ),
+			);
+			$sizes  = (array) ( $style['font_size'] ?? array() );
+			if ( '' !== $font['family'] || '' !== $font['weight'] || '' !== (string) ( $sizes['desktop'] ?? '' ) ) {
+				$s[ $prefix . '_typography' ] = 'custom';
+				if ( '' !== $font['family'] ) {
+					$s[ $prefix . '_font_family' ] = explode( ',', $font['family'] )[0];
+				}
+				if ( '' !== $font['weight'] ) {
+					$s[ $prefix . '_font_weight' ] = $font['weight'];
+				}
+				$desktop = (string) ( $sizes['desktop'] ?? '' );
+				if ( '' !== $desktop ) {
+					$s[ $prefix . '_font_size' ] = self::slider( $desktop );
+					foreach ( array( 'tablet', 'mobile' ) as $device ) {
+						$value = (string) ( $sizes[ $device ] ?? '' );
+						// Large type only shrinks on small screens; body-size text keeps its size.
+						if ( '' === $value && 'heading' === $type ) {
+							$value = self::scaleLength( $desktop, self::DEVICE_RATIO[ $device ], self::MIN_FONT_PX );
+						}
+						if ( '' !== $value ) {
+							$s[ $prefix . '_font_size_' . $device ] = self::slider( $value );
+						}
+					}
+				}
+			}
+			if ( '' !== (string) ( $style['line_height'] ?? '' ) ) {
+				$s[ $prefix . '_line_height' ] = self::lineHeight( (string) $style['line_height'] );
+			}
+		}
+		if ( 'icon' === $type && '' !== (string) ( $style['font_size']['desktop'] ?? '' ) ) {
+			$s['size'] = self::slider( (string) $style['font_size']['desktop'] );
+		}
+		if ( 'button' === $type ) {
+			$bg = $this->resolveColor( (string) ( $style['background'] ?? '' ) );
+			if ( '' !== $bg ) {
+				unset( $s['__globals__']['background_color'] );
+				$s['background_background'] = 'classic';
+				$this->color( $s, 'background_color', $bg );
+				if ( '' === $color ) {
+					unset( $s['__globals__']['button_text_color'] );
+					$s['button_text_color'] = self::contrastText( substr( $bg, 0, 7 ) );
+				}
+			}
+			if ( '' !== (string) ( $style['padding'] ?? '' ) ) {
+				$s['text_padding'] = self::dims( (string) $style['padding'] );
+			}
+			$border = $this->resolveColor( (string) ( $style['border_color'] ?? '' ) );
+			if ( '' !== $border && '' !== (string) ( $style['border_width'] ?? '' ) ) {
+				$s['border_border'] = 'solid';
+				$s['border_width']  = self::dims( (string) $style['border_width'] );
+				unset( $s['__globals__']['border_color'] );
+				$this->color( $s, 'border_color', $border );
+			}
+		}
+		if ( '' !== (string) ( $style['radius'] ?? '' ) ) {
+			$key = 'image' === $type ? 'image_border_radius' : ( 'button' === $type ? 'border_radius' : '' );
+			if ( '' !== $key ) {
+				$s[ $key ] = self::dims( (string) $style['radius'] );
+			}
+		}
+		if ( in_array( $type, array( 'heading', 'text-editor', 'button', 'image', 'icon' ), true ) ) {
+			foreach ( array( 'tablet', 'mobile' ) as $device ) {
+				$a = (string) ( $style['align'][ $device ] ?? '' );
+				if ( '' !== $a ) {
+					$s[ 'align_' . $device ] = $a;
+				}
+			}
+		}
+	}
+
+	/**
+	 * Build the widget for an element (styles from the brand profile).
+	 *
+	 * @param array<string, mixed> $e          Element.
+	 * @param string               $text_color Section text colour override.
+	 * @param string               $align      Section alignment.
+	 * @param string               $type       Section type.
+	 * @param bool                 $first      In the first section.
+	 * @return array<string, mixed>
+	 */
+	private function widgetCore( array $e, string $text_color, string $align, string $type, bool $first ): array {
 		$align = '' !== ( $e['align'] ?? '' ) ? $e['align'] : $align;
 		switch ( $e['type'] ) {
 			case 'heading':
@@ -534,6 +654,19 @@ final class ElementorMapper {
 			case 'spacer':
 				return $this->spacerWidget( $e['height'] );
 
+			case 'video':
+				if ( ! $this->compat->has( 'video' ) ) {
+					$this->notes[] = 'video_skipped';
+					return $this->spacerWidget( '8px' );
+				}
+				$s = array( 'video_type' => $e['provider'] );
+				$s[ 'youtube' === $e['provider'] ? 'youtube_url' : 'vimeo_url' ] = $e['url'];
+				return $this->element( 'widget', $s, array(), false, 'video' );
+
+			case 'html':
+				$this->notes[] = 'html_fallback';
+				return $this->element( 'widget', array( 'html' => $e['html'] ), array(), false, 'html' );
+
 			case 'divider':
 				if ( ! $this->compat->has( 'divider' ) ) {
 					return $this->spacerWidget( '24px' );
@@ -662,6 +795,27 @@ final class ElementorMapper {
 		}
 		$s['background_background'] = 'classic';
 		$this->color( $s, 'background_color', $hex );
+	}
+
+	/**
+	 * Background image (cover, centred) from an http(s) URL.
+	 *
+	 * @param array<string, mixed> $s   Settings.
+	 * @param string               $url Image URL ("" = none).
+	 */
+	private function backgroundImage( array &$s, string $url ): void {
+		if ( '' === $url ) {
+			return;
+		}
+		$s['background_background'] = 'classic';
+		$s['background_image']      = array(
+			'url'    => $url,
+			'id'     => '',
+			'source' => 'url',
+		);
+		$s['background_size']       = 'cover';
+		$s['background_position']   = 'center center';
+		$this->notes[]              = 'external_image';
 	}
 
 	/**
