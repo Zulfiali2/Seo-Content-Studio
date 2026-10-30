@@ -44,3 +44,11 @@
 	.aiscs-studio__split { grid-template-columns: 1fr; }
 	.aiscs-studio__pages th:nth-child(3), .aiscs-studio__pages td:nth-child(3), .aiscs-studio__pages th:nth-child(6), .aiscs-studio__pages td:nth-child(6) { display: none; }
 }
+.aiscs-studio tr.is-selected td { background: #f0f6fc; }
+.aiscs-studio__steps { margin-left: 20px; }
+.aiscs-studio__steps li { color: #646970; }
+.aiscs-studio__steps li.is-done { color: #00a32a; }
+.aiscs-studio__steps li.is-current { color: #1d2327; font-weight: 600; }
+.aiscs-studio__steps .components-spinner { margin: 0 0 0 8px; vertical-align: middle; }
+.aiscs-studio__done { border-left: 4px solid #00a32a; }
+.aiscs-studio__code textarea { font-family: Menlo, Consolas, monospace; font-size: 12px; }

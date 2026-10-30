@@ -51,6 +51,8 @@ class WebsiteStudioPage {
 			'dashboard' => __( 'Dashboard', 'ai-seo-content-studio' ),
 			'brand'     => __( 'Website Brand Analyzer', 'ai-seo-content-studio' ),
 			'profiles'  => __( 'Brand Profiles', 'ai-seo-content-studio' ),
+			'clone'     => __( 'Clone Existing Page', 'ai-seo-content-studio' ),
+			'pages'     => __( 'Generated Pages', 'ai-seo-content-studio' ),
 		);
 	}
 
@@ -101,7 +103,7 @@ class WebsiteStudioPage {
 		}
 		$file = AISCS_DIR . 'assets/website-studio/studio.js';
 		$ver  = AISCS_VERSION . '-' . ( is_readable( $file ) ? (string) filemtime( $file ) : '0' );
-		wp_enqueue_script( 'aiscs-studio', AISCS_URL . 'assets/website-studio/studio.js', array( 'wp-element', 'wp-components', 'wp-api-fetch', 'wp-i18n' ), $ver, true );
+		wp_enqueue_script( 'aiscs-studio', AISCS_URL . 'assets/website-studio/studio.js', array( 'wp-element', 'wp-components', 'wp-api-fetch', 'wp-i18n', 'wp-url' ), $ver, true );
 		wp_enqueue_style( 'aiscs-studio', AISCS_URL . 'assets/website-studio/studio.css', array( 'wp-components' ), $ver );
 		wp_set_script_translations( 'aiscs-studio', 'ai-seo-content-studio', AISCS_DIR . 'languages' );
 

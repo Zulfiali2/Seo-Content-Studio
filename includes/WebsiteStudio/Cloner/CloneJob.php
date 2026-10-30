@@ -140,7 +140,21 @@ class CloneJob implements JobHandlerInterface {
 						)
 					);
 					$result['plan_warnings'] = (array) ( $state['plan_warnings'] ?? array() );
-					$result['ai_warnings']   = (array) ( $written['warnings'] ?? array() );
+					// Warnings name the slot by its role and current text, so the user can find it.
+					$labels = array();
+					foreach ( (array) ( $state['slots'] ?? array() ) as $slot ) {
+						$labels[ $slot['key'] ] = array(
+							'role' => $slot['role'],
+							'text' => mb_substr( (string) $slot['text'], 0, 80 ),
+						);
+					}
+					$result['ai_warnings'] = array_map(
+						static fn ( array $w ): array => $w + ( $labels[ $w['key'] ] ?? array(
+							'role' => '',
+							'text' => '',
+						) ),
+						(array) ( $written['warnings'] ?? array() )
+					);
 					$studio['result']        = $result;
 					$this->projects->save( $project_id, 'studio', $studio );
 					$this->projects->setStage( $project_id, 'studio_draft' );

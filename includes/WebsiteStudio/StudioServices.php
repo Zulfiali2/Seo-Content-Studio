@@ -14,6 +14,7 @@ use AiSeoContentStudio\WebsiteStudio\Engine\DocumentValidator;
 use AiSeoContentStudio\WebsiteStudio\Engine\DraftManager;
 use AiSeoContentStudio\WebsiteStudio\Engine\ElementorCompat;
 use AiSeoContentStudio\WebsiteStudio\Engine\PageBuilder;
+use AiSeoContentStudio\WebsiteStudio\Engine\PostGateway;
 use AiSeoContentStudio\WebsiteStudio\Persistence\AuditLog;
 use AiSeoContentStudio\WebsiteStudio\Persistence\GeneratedPageRepository;
 
@@ -35,6 +36,7 @@ final class StudioServices {
 		private readonly ElementorBridgeInterface $bridge = new ElementorBridge(),
 		private readonly GeneratedPageRepository $pages = new GeneratedPageRepository(),
 		private readonly AuditLog $audit = new AuditLog(),
+		private readonly PostGateway $posts = new PostGateway(),
 	) {}
 
 	public function bridge(): ElementorBridgeInterface {
@@ -50,7 +52,7 @@ final class StudioServices {
 	}
 
 	public function drafts(): DraftManager {
-		return $this->drafts ??= new DraftManager( $this->bridge, $this->compat(), new DocumentValidator( $this->compat() ), $this->pages, $this->audit );
+		return $this->drafts ??= new DraftManager( $this->bridge, $this->compat(), new DocumentValidator( $this->compat() ), $this->pages, $this->audit, $this->posts );
 	}
 
 	public function cloner(): PageCloner {

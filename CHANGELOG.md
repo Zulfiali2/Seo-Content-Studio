@@ -2,6 +2,32 @@
 
 All notable changes to AI SEO Content Studio. Versions follow semantic versioning.
 
+## 1.8.0 — 2026-10-30 — AI Website Studio, phases 2 and 3: page cloner and native Elementor engine
+
+Added
+- **Clone Existing Page**: choose an Elementor page, see every text field and decide which to rewrite, enter the topic, keywords, audience, intent, location and tone, and get a new draft with the same design and new content. Kept by default: header and footer, the business name, legal text, contact details, testimonials, counters/prices and dynamic tags. The AI is told never to invent facts. One AI request per clone runs as a background job (real step status, cancel), and a retried step never repeats the request or creates a second draft. "Duplicate only" makes an exact copy without AI.
+- The copy gets new element and repeater IDs, and keeps the design settings, responsive values, animations, global colours, page settings, page template and featured image. The source page is only read, and a fingerprint check confirms it did not change. The meta title and description go to the plugin's SEO fields and to Yoast SEO or Rank Math.
+- **Native Elementor engine**: a versioned page design schema (PageDocument v1) mapped to native Free widgets (Heading, Text Editor, Button, Image, Icon, Icon List, Accordion with FAQ schema, Spacer, Divider) in flexbox containers. Legacy sections/columns are used when containers are off.
+  - Brand-profile colours that match Elementor Site Settings are written as global references.
+  - Tablet and mobile font sizes, padding and column widths are set per device. Hero and CTA buttons are full width on phones.
+- **Document validator** run before every save: IDs, parent/child rules, widget availability, control value shapes, links (no `javascript:` or `data:`), media references and executable content.
+- **Draft manager**: always creates a new draft through Elementor's `Document::save()`.
+  - It writes to an existing page only when the studio created it and it is still unpublished.
+  - If Elementor rejects a page, the new draft is removed.
+- Generated Pages screen (Open in Elementor, Preview), and an advanced "build from design document" panel.
+- REST:
+  - `GET /design/capabilities`
+  - `GET /pages/{id}/clone/plan`, `POST /pages/{id}/clone`, `POST /pages/{id}/clone-and-generate`
+  - `GET /design/jobs/{id}`, `POST /design/jobs/{id}/cancel`
+  - `POST /design/pages/build`, `GET /design/pages`
+- Database version 7: table `aiscs_generated_pages`.
+
+Changed
+- Website Studio projects are not listed under Projects and History. `DraftWriter::syncSeoPlugins()` is now public static, so the cloner can reuse it.
+
+Tests
+- 54 unit tests in total, now including the mapper, validator, draft manager ownership and rollback, the cloner, and the clone job.
+
 ## 1.7.0 — 2026-10-30 — AI Website Studio, phase 1: brand analysis
 
 Added

@@ -4,7 +4,7 @@ Tags: seo, ai, content, elementor, keyword research
 Requires at least: 6.6
 Tested up to: 6.7
 Requires PHP: 8.2
-Stable tag: 1.7.0
+Stable tag: 1.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -29,7 +29,7 @@ AI SEO Content Studio includes:
 * Elementor drafts built from free Elementor widgets (content-only or designed layout). Elementor Pro is not needed.
 
 * AI images (OpenAI, Google Gemini, xAI Grok) saved to your Media Library with alt text and captions, placed in the draft.
-* AI Website Studio: analyze your website's design (Elementor Site Settings, page layouts, theme styles) and save reusable brand profiles.
+* AI Website Studio: analyze your website's design and save brand profiles; clone Elementor pages with new SEO content; build native, editable Elementor pages (free widgets only).
 
 Elementor Pro, Yoast SEO and Rank Math are not required.
 
@@ -54,6 +54,9 @@ Nothing is sent until you add a key and run an action.
 3. Go to AI SEO Studio → AI Providers, save an API key, run "Test connection", choose a text model and a default provider.
 
 == Changelog ==
+
+= 1.8.0 =
+* AI Website Studio phases 2 and 3: clone any Elementor page into a new draft with new SEO content (the original is never changed), and a native Elementor engine that builds editable pages from free widgets with your brand profile, global colours and responsive settings.
 
 = 1.7.0 =
 * New AI Website Studio menu (phase 1): Website Brand Analyzer reads your Elementor Site Settings, page designs, theme.json and stylesheets and saves editable brand profiles (colours, fonts, type scale, buttons, cards, spacing). No AI request is made. Credential key rotation with AISCS_ENCRYPTION_KEY_PREVIOUS.

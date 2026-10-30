@@ -57,8 +57,8 @@ Baseline audited: **AI SEO Content Studio 1.6.8**, the uploaded ZIP. The brief n
 |---|---|---|
 | 0 | Audit and implementation map | **Done** (this file) |
 | 1 | Studio menu, page selector, Website Analyzer, Brand Extractor, brand profiles | **Done (1.7.0)**, verified by unit tests only (no live WordPress run) |
-| 2 | Page cloner (new draft, new widget IDs, content replacement, original untouched) | Not started |
-| 3 | Normalized design schema + Elementor mapper + document validator | Not started |
+| 2 | Page cloner (new draft, new widget IDs, content replacement, original untouched) | **Done (1.8.0)**, unit tests only |
+| 3 | Normalized design schema + Elementor mapper + document validator | **Done (1.8.0)**, unit tests only |
 | 4 | HTML/CSS → Elementor (reuses `CssParser`) | Not started |
 | 5 | Screenshot → design (vision) | Not started |
 | 6 | Content-to-design generation, section images, internal links | Not started |
@@ -80,3 +80,27 @@ WebsiteStudioPage + assets/website-studio/studio.js: UI
 ```
 
 The analyzers and the token schema are pure PHP with no WordPress calls, so they are unit-tested directly. Every value in a profile passes a strict pattern (hex colour, CSS length or box, single shadow, plain font name). This lets later phases write tokens into Elementor settings without further escaping.
+
+## 6. Phases 2–3 design (implemented in 1.8.0)
+
+```
+Workflow input (AI / HTML / screenshot / JSON)
+  └─ PageDocument::normalize  (schema v1, sanitised text, stable section ids)
+       └─ ElementorMapper(ElementorCompat, IdGenerator, DesignTokens, kit colours)
+            └─ DocumentValidator (MODE_GENERATED)
+                 └─ DraftManager::create → ElementorBridge::save (Document::save) → new draft
+                                              + GeneratedPageRepository row (ownership, section map)
+
+Existing Elementor page
+  └─ PageCloner::plan    → ContentSlots::extract (rewrite vs protected)
+  └─ CloneJob (JobRunner): plan → write (CloneContentGenerator, one AI request) → build
+       └─ ContentSlots::apply (in memory) → ElementTreeCopier (new ids) → DocumentValidator (MODE_CLONED)
+            └─ DraftManager::create → new draft (source only read; fingerprint checked)
+```
+
+`StudioServices` builds the Elementor-dependent services on first use, because Elementor registers its widgets after `init`.
+
+Element settings were checked against the Elementor 4.0.8 source:
+- Containers: `content_width`, `boxed_width`, `width` (with the `custom` unit), `flex_direction`, `flex_wrap`, `flex_gap` (GAPS), `flex_align_items`, `min_height`, `padding*`, `background_*`, `border_radius`, `box_shadow_box_shadow*`.
+- Widgets: heading `title/header_size/title_color/typography_*`; button `text/link/background_*/button_text_color/border_*/text_padding`; accordion `tabs/tab_title/tab_content/faq_schema`; icon-list `icon_list`; image `image/image_size/caption_source/image_border_radius`; spacer `space`.
+- Legacy layout: section `layout/content_width/height`, column `_column_size/_inline_size*`.

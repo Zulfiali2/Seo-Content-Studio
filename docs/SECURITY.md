@@ -134,3 +134,19 @@ Report vulnerabilities privately to the plugin maintainer, not in public issues.
 - **Output.** The studio UI renders through React, which escapes text. The admin bootstrap data contains no secrets.
 - **Audit log.** `wp_aiscs_audit_log` records analyses and profile create/update/delete with user, time and object. Content and credentials are never logged.
 - **Credential key rotation.** Define `AISCS_ENCRYPTION_KEY_PREVIOUS` (the old key, or `wp-salts` for the salt-derived default) next to a new `AISCS_ENCRYPTION_KEY`. A key the current key cannot open is decrypted with the previous key and immediately re-encrypted with the new one. Remove the constant after every provider shows its key as readable.
+
+## AI Website Studio — cloning and page building (1.8.0)
+
+- **Original pages are never written.** `DraftManager` is the only studio code that saves Elementor data, and it always does so through Elementor's `Document::save()`. It creates new drafts. It updates an existing page only when an `aiscs_generated_pages` row proves the studio created it, the page is still draft, pending or private, and the user can `edit_post` it. Cloning reads the source tree into memory; the copy is saved under a new post ID with new element and repeater IDs. A fingerprint of the source's `_elementor_data` is compared before and after.
+- **Validation before every save.** `DocumentValidator` checks:
+  - element IDs (format, uniqueness) and parent/child rules (widgets only in containers or columns, columns only in sections, inner sections only in columns), depth ≤30, ≤3,000 elements, ≤4 MB;
+  - widget availability on the site;
+  - control value shapes (sliders, dimensions, and only the mapper's own `calc()` widths);
+  - link and media URLs (http(s), mailto, tel, relative, fragment; never `javascript:`, `data:`, `vbscript:` or protocol-relative), and that media IDs are attachments.
+
+  For generated pages, any string with script, iframe, svg or style tags, `on*=` handlers or script URLs is rejected. Cloned pages may keep the author's own HTML widgets and custom CSS (they are the site's existing content), but unsafe links are still rejected.
+- **Generated HTML.** Text Editor content goes through an allow-list DOM sanitiser (`HtmlFragment`), then `wp_kses_post()`. Elementor also runs `wp_kses_post()` on save for users without `unfiltered_html`. Plain text fields are entity-escaped.
+- **Free widgets only.** Generated pages use only Elementor Free widgets that are registered on the site, never Pro-only widgets. Missing widgets fall back to native equivalents (icon list → bulleted text, accordion → question headings).
+- **AI content.** The clone prompt forbids invented prices, statistics, years, client counts, awards, qualifications, testimonials, client names, guarantees and contact details. Testimonial, counter, price and dynamic-tag fields are locked and never sent to the AI. Contact details, legal text, the business name and header/footer text are kept by default. Answers are matched to the requested slot keys only. Unknown keys are ignored, and an empty answer never blanks a field.
+- **Billing safety.** The clone job stores the AI answer before building, so a retried step never repeats the request, and it never creates a second draft. The existing duplicate-request lock and usage limits apply.
+- **IDOR.** Source pages need `edit_post`. Brand profiles and studio projects need ownership (or the manage capability). Studio jobs are reachable only through `/design/jobs/{id}` for projects marked `_aiscs_kind = website_studio`.
