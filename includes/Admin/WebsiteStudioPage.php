@@ -48,14 +48,18 @@ class WebsiteStudioPage {
 	 */
 	public function views(): array {
 		return array(
-			'dashboard' => __( 'Dashboard', 'ai-seo-content-studio' ),
-			'generate'  => __( 'AI Page Generator', 'ai-seo-content-studio' ),
-			'brand'     => __( 'Website Brand Analyzer', 'ai-seo-content-studio' ),
-			'profiles'  => __( 'Brand Profiles', 'ai-seo-content-studio' ),
-			'clone'     => __( 'Clone Existing Page', 'ai-seo-content-studio' ),
-			'html'      => __( 'HTML to Elementor', 'ai-seo-content-studio' ),
-			'image'     => __( 'Image to Design', 'ai-seo-content-studio' ),
-			'pages'     => __( 'Generated Pages', 'ai-seo-content-studio' ),
+			'dashboard'   => __( 'Dashboard', 'ai-seo-content-studio' ),
+			'generate'    => __( 'AI Page Generator', 'ai-seo-content-studio' ),
+			'brand'       => __( 'Website Brand Analyzer', 'ai-seo-content-studio' ),
+			'profiles'    => __( 'Brand Profiles', 'ai-seo-content-studio' ),
+			'clone'       => __( 'Clone Existing Page', 'ai-seo-content-studio' ),
+			'html'        => __( 'HTML to Elementor', 'ai-seo-content-studio' ),
+			'image'       => __( 'Image to Design', 'ai-seo-content-studio' ),
+			'pages'       => __( 'Generated Pages', 'ai-seo-content-studio' ),
+			'tools'       => __( 'Page Tools', 'ai-seo-content-studio' ),
+			'consistency' => __( 'Design Consistency Checker', 'ai-seo-content-studio' ),
+			'library'     => __( 'Design Library', 'ai-seo-content-studio' ),
+			'revisions'   => __( 'Revisions and History', 'ai-seo-content-studio' ),
 		);
 	}
 

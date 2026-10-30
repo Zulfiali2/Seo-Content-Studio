@@ -2,6 +2,50 @@
 
 All notable changes to AI SEO Content Studio. Versions follow semantic versioning.
 
+## 1.9.0-beta.4 — 2026-10-30 — AI Website Studio, phase 7: advanced features
+
+Added
+- **Revision history** (new table `aiscs_page_revisions`, DB version 8). Every change the studio makes to a draft stores a compressed snapshot of the Elementor data, the design document and the section map, with the action, a summary, the section, the user and the provider/model.
+  - Edits made in Elementor between studio changes are captured as their own revision ("Edited in Elementor") before the next change. A page made before this version gets its first revision on its first change.
+  - Retention: 25 revisions per page; revision 1 (the page as created) is always kept. Snapshots over 4 MB are recorded without a snapshot. History is removed when the page is deleted, and orphans are pruned daily.
+  - Screens and REST: list, compare a revision with the page now (sections added, removed, moved and changed, with the texts that changed), restore the whole page, and undo one section. A restore is itself a revision.
+- **Section regeneration** with proposals:
+  - AI actions (background job `studio_section_regenerate`): rewrite content, improve SEO and redesign (one strict-JSON request for that section only), or regenerate its images with the image provider.
+  - Style actions (immediate, no AI): background colour role, heading size and font, layout and columns, spacing preset, responsive improvements.
+  - The result is a proposal. It is validated in `generated` mode and previewed on a temporary page; only after **Approve** does that one section change (the other sections are left as they are). A revision is stored and the design document and section map are updated. **Discard** deletes the proposal and its images.
+  - Rewrites keep the section's structure and its existing images; images are never invented (extra image slots are dropped and reported); the page keeps its single H1.
+- **Page preview**: Elementor's own rendering in desktop (1280 px), tablet (768 px) and mobile (390 px) frames, as a full page or scrolled to a section.
+  - Proposals and library items are previewed on temporary draft pages. They are hidden from the Pages list and the page pickers, deleted on approve or discard, and pruned after 24 hours.
+  - Previews use WordPress's nonce-protected preview links, so only users who may edit the page can open them.
+- **Design Consistency Checker**: compares a page with a brand profile, with up to five reference pages (analysed by the Website Analyzer), or with the tokens the page was built with (stored with the design document from now on), else the Elementor kit.
+  - Reports pass, warning or fail for brand colours, typography, button styling, card styling, section spacing, container widths, image treatment, heading hierarchy, visual patterns and responsive layout, plus a score.
+  - Recommendations are computed on the server and applied one by one by id. A fix changes only the settings it names; colours that match a kit colour are linked to the global colour.
+- **Accessibility Checker** (WCAG 2.2 AA as the reference; it never claims compliance):
+  - Checks heading hierarchy and empty headings, missing image alt text, empty or vague links and buttons, buttons without a link, colour contrast of explicit colours against the background behind them, small text, long unbroken text, form fields without labels, custom HTML that needs a keyboard check, and video captions.
+  - Each finding has a severity (error, warning or recommendation) and a suggested fix. Fixes that need text (alt text, button labels) ask for it. Alt text is saved on the Media Library attachment.
+- **Design Library** (new table `aiscs_design_library`):
+  - Save a section, or any element inside one as a component, from a page you may edit, with a name and category (hero, services, FAQ…; button, card, pricing…).
+  - Preview, edit, duplicate, delete, and insert into a studio draft (top or end). Inserted items get new element ids that are unique on the page; a component is wrapped in a section. Items that need Flexbox Containers are refused on sites without them.
+- **Responsive generator**: besides the engine's per-device values, the consistency checker flags large headings without phone sizes, columns that stay side by side on phones and large section padding on phones, with fixes. "Improve responsive design" regenerates a section's tablet and phone layout.
+- **Screens**:
+  - Page Tools, with Preview, Sections, Design consistency, Accessibility and Revisions tabs, linked from Generated Pages.
+  - Design Consistency Checker, Design Library, and Revisions and History.
+- **REST**:
+  - `GET /design/pages/{id}/overview`
+  - `GET|POST /design/pages/{id}/preview`
+  - `POST /design/pages/{id}/consistency-check` and `/consistency/apply`
+  - `POST /design/pages/{id}/accessibility-check` and `/accessibility/apply`
+  - `POST /design/pages/{id}/sections/{section}/regenerate`
+  - `GET /design/proposals/{id}`, and `POST /design/proposals/{id}/preview`, `/approve` and `/discard`
+  - `GET /design/pages/{id}/revisions`, `GET /design/pages/{id}/revisions/compare`, `POST /design/pages/{id}/revisions/{n}/restore` and `POST /design/pages/{id}/revisions/{n}/sections/{element}/restore`
+  - `GET|POST /design/library`, `GET|PUT|DELETE /design/library/{id}`, and `POST /design/library/{id}/duplicate`, `/preview` and `/insert`
+
+Changed
+- `DraftManager::update()` takes the revision details and stores a revision. `DraftManager::validate()` validates without saving.
+- `PageBuilder` stores the build tokens with the design document. `PageBuilder::mapper()` is shared with regeneration.
+- `PageGenerator::sectionSchema()` and `contentRules()` are shared with section regeneration.
+- `ContentLayoutMapper::adapt()` can work on single sections.
+
 ## 1.9.0-beta.3 — 2026-10-30 — AI Website Studio, phase 6: AI page generator
 
 Added

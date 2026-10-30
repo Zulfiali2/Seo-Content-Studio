@@ -198,3 +198,16 @@ Report vulnerabilities privately to the plugin maintainer, not in public issues.
   - Placeholders and approved images are attached to the draft, so `MediaImporter::deleteUnused()` never removes an image a page shows.
   - Only plugin-made images are ever deleted (rejected suggestions, replaced placeholders), and only when the user may delete them.
 - **Ownership.** Every generator route requires `aiscs_generate_content` and ownership of the studio project. Applying images also passes `DraftManager::assertWritable()` (a studio-made draft the user can edit). Nothing is published.
+
+## AI Website Studio — page tools, revisions and library (1.9.0-beta.4)
+
+- **No writes to original pages.** Every write (fixes, regeneration, restore, library insert) goes through `DraftManager::update()`. That requires a studio-made page that is still a draft, pending or private and that the user can edit, validates the whole tree, and stores a revision. Reading (checks, preview links, history, saving to the library) needs `edit_post` on the page.
+- **Fixes cannot carry arbitrary settings.** The client sends only finding ids. The server recomputes the findings from the current page and applies the operations it generated itself. User text (alt text, button labels) is sanitised and HTML-escaped. Alt text is written only to attachments the user may edit.
+- **Proposals are isolated.**
+  - A regeneration result lives in a studio project owned by the user, and is validated in `generated` mode, so only free native widgets are allowed and there is no HTML widget.
+  - It is previewed on a separate temporary draft that is never published, is hidden from page lists, carries an expiry, and is deleted on approve, on discard, or after 24 hours.
+  - Approving re-checks that the section is still where the proposal expects it.
+- **Previews** use WordPress's nonce-protected draft preview links: only logged-in users who may edit the page can open them, and nothing is exposed publicly.
+- **AI section requests** send only that section's text, the page's section types, the brief and the business facts, under the same rules as the generator. Facts are never invented, and images are never invented (only existing images are reused). The answer is strict JSON and passes the PageDocument sanitisers.
+- **Revisions** are stored in the plugin's own table: compressed, limited per page and in size, deleted with the page, and pruned for deleted pages. Restores are themselves revisions.
+- **Design library** items are owned by their creator (managers see all). Saving validates the element in `cloned` mode and limits it to 1 MB. Inserting copies it with new ids, never shares ids with the target page, and is validated again.

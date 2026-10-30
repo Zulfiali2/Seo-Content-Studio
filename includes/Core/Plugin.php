@@ -41,6 +41,8 @@ use AiSeoContentStudio\REST\SettingsController;
 use AiSeoContentStudio\REST\StatusController;
 use AiSeoContentStudio\REST\UsageController;
 use AiSeoContentStudio\REST\WebsiteDesignController;
+use AiSeoContentStudio\REST\PageToolsController;
+use AiSeoContentStudio\REST\DesignLibraryController;
 use AiSeoContentStudio\REST\WebsiteStudioController;
 use AiSeoContentStudio\Research\CompetitorFetcher;
 use AiSeoContentStudio\Research\CostEstimates;
@@ -72,6 +74,14 @@ use AiSeoContentStudio\WebsiteStudio\StudioServices;
 use AiSeoContentStudio\WebsiteStudio\Generator\GeneratedImages;
 use AiSeoContentStudio\WebsiteStudio\Generator\GeneratorJob;
 use AiSeoContentStudio\WebsiteStudio\Generator\SiteGateway;
+use AiSeoContentStudio\WebsiteStudio\Editor\PageChecks;
+use AiSeoContentStudio\WebsiteStudio\History\RevisionService;
+use AiSeoContentStudio\WebsiteStudio\Library\DesignLibrary;
+use AiSeoContentStudio\WebsiteStudio\Persistence\LibraryRepository;
+use AiSeoContentStudio\WebsiteStudio\Persistence\RevisionRepository;
+use AiSeoContentStudio\WebsiteStudio\Preview\PreviewManager;
+use AiSeoContentStudio\WebsiteStudio\Sections\Proposals;
+use AiSeoContentStudio\WebsiteStudio\Sections\RegenerateJob;
 use AiSeoContentStudio\WebsiteStudio\Vision\ScreenshotJob;
 use AiSeoContentStudio\WebsiteStudio\Vision\ScreenshotStore;
 
@@ -299,6 +309,7 @@ final class Plugin {
 		foreach ( array( GeneratorJob::TYPE_WRITE, GeneratorJob::TYPE_BUILD, GeneratorJob::TYPE_IMAGES ) as $generator_type ) {
 			$this->handlers[ $generator_type ] = new GeneratorJob( $generator_type, $this->projects, $this->text, $this->images, $this->settings, $this->studio, $this->media, new SiteGateway(), new BrandProfileRepository() );
 		}
+		$this->handlers[ RegenerateJob::TYPE ] = new RegenerateJob( $this->projects, $this->text, $this->images, $this->media, $this->settings, $this->proposals() );
 		// The job lock must outlive the slowest request a step can make (all retries included).
 		$job_ttl         = (int) $this->settings->get( 'ai.request_timeout' ) * ( 1 + (int) $this->settings->get( 'ai.max_retries' ) ) + 180;
 		$this->jobs      = new JobRunner( $this->projects, array_values( $this->handlers ), $this->logger, null, $job_ttl );
@@ -336,6 +347,8 @@ final class Plugin {
 		add_action( 'aiscs_prune_usage_log', array( $this, 'pruneUsageLog' ) );
 		add_action( 'init', array( ProjectRepository::class, 'registerPostType' ) );
 		add_action( JobRunner::HOOK, array( $this, 'runJob' ), 10, 2 );
+		add_action( 'pre_get_posts', array( PreviewManager::class, 'hideFromLists' ) );
+		add_action( 'deleted_post', static fn ( int $post_id ) => ( new RevisionRepository() )->deleteForPage( $post_id ) );
 
 		// Blog template shortcodes render on the front end and in the Elementor editor (admin AJAX).
 		( new BlogShortcodes() )->register();
@@ -376,6 +389,9 @@ final class Plugin {
 		( new AuditLog() )->prune( $days );
 		// Uploaded screenshots are deleted after analysis; this removes any left behind.
 		( new ScreenshotStore() )->prune( DAY_IN_SECONDS );
+		// Expired preview pages and the history of pages that were deleted.
+		$this->previews()->prune();
+		( new RevisionRepository() )->pruneOrphans();
 	}
 
 	/**
@@ -426,5 +442,21 @@ final class Plugin {
 		) )->register();
 		$site = new SiteGateway();
 		( new WebsiteDesignController( $this->studio, $this->projects, $this->jobs, new BrandProfileRepository(), $this->settings, $this->images, new GeneratedImages( $this->projects, $this->studio, $site, $this->media ), $site ) )->register();
+		( new PageToolsController( $this->studio, $this->projects, $this->jobs, new BrandProfileRepository(), new WebsiteAnalyzer( $design_source, $analyses ), new PageChecks( $this->studio ), $this->proposals(), new RevisionService( $this->studio ), $this->images ) )->register();
+		( new DesignLibraryController( new LibraryRepository(), new DesignLibrary( new LibraryRepository(), $this->studio, $this->previews() ), new BrandProfileRepository() ) )->register();
+	}
+
+	/**
+	 * Temporary preview pages.
+	 */
+	private function previews(): PreviewManager {
+		return new PreviewManager( $this->studio );
+	}
+
+	/**
+	 * Section regeneration proposals.
+	 */
+	private function proposals(): Proposals {
+		return new Proposals( $this->projects, $this->studio, $this->previews(), new SiteGateway(), $this->media, new BrandProfileRepository() );
 	}
 }

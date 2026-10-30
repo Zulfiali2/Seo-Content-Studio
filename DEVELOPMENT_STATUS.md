@@ -1,6 +1,6 @@
 # Development status — AI Website Studio
 
-Last updated: 2026-10-30. Plugin version **1.9.0-beta.3** (DB version 7). Target for the full studio: 1.9.0.
+Last updated: 2026-10-30. Plugin version **1.9.0-beta.4** (DB version 8). Target for the full studio: 1.9.0.
 
 ## Summary
 
@@ -34,7 +34,14 @@ Last updated: 2026-10-30. Plugin version **1.9.0-beta.3** (DB version 7). Target
 | 6 | Section images (placeholders → AI candidates → approval into the live draft) | ✅ Implemented |
 | 6 | Brand consistency (role backgrounds → brand profile / Elementor kit colours) | ✅ Implemented |
 | 6 | Generator jobs, REST `/design/generate/*`, AI Page Generator screen | ✅ Implemented |
-| 7 | Consistency, accessibility, section regeneration, preview, revisions, design library | ⏳ Not started (section maps are stored for regeneration; `DraftManager::update()` and `ElementorMapper::mapSection()` exist) |
+| 7 | Revision history (snapshots, outside edits, compare, restore, undo section, retention) | ✅ Implemented (1.9.0-beta.4) |
+| 7 | Section regeneration (AI rewrite/SEO/redesign/images; colours, typography, layout, spacing, responsive) with proposals | ✅ Implemented |
+| 7 | Page preview (device frames, section preview, temporary preview pages) | ✅ Implemented |
+| 7 | Design Consistency Checker (profile, reference pages, build tokens) with per-recommendation fixes | ✅ Implemented |
+| 7 | Accessibility Checker (WCAG 2.2 AA reference) with reviewed fixes | ✅ Implemented |
+| 7 | Design Library (save, preview, edit, duplicate, delete, insert) | ✅ Implemented |
+| 7 | Responsive generator (engine values + responsive checks/fixes + section action) | ✅ Implemented |
+| 7 | REST `/design/pages/{id}/*`, `/design/proposals/*`, `/design/library/*`; Page Tools, Consistency, Library, Revisions screens | ✅ Implemented |
 | 8 | Live WP/Elementor QA matrix, 1.9.0 packaging | ⏳ Not started |
 
 "Implemented" means the code is written and unit-tested. It does **not** mean it has been verified in a running WordPress site (see Known limitations).
@@ -47,9 +54,38 @@ Last updated: 2026-10-30. Plugin version **1.9.0-beta.3** (DB version 7). Target
 | B: HTML → Elementor (paste → parse → native widgets → validate → preview → draft → edit) | Code complete; needs a live run (TESTING.md 18–20) |
 | C: Screenshot → Elementor (upload → analyse → brand and layout → content → placeholder images → layout → draft) | Code complete; needs a live run with real providers (TESTING.md 21–24) |
 | G: AI page from a brief (brief → review with fact check → approved links → draft → approved AI images) | Code complete; needs a live run with real providers (TESTING.md 25–29) |
-| D: Brand consistency | Profiles and generator colour roles done; checker in phase 7 |
-| E: Section regeneration | Phase 7 (foundations exist) |
-| F: Design library | Phase 7 |
+| D: Brand consistency (generate → compare with profile/reference pages → report → apply recommendations) | Code complete; needs a live run (TESTING.md 33) |
+| E: Section regeneration (select → regenerate → preview → approve → revision) | Code complete; needs a live run (TESTING.md 31–32) |
+| F: Design library (save → preview → insert into a draft) | Code complete; needs a live run (TESTING.md 35–36) |
+
+## Files changed in 1.9.0-beta.4
+
+New:
+- `includes/WebsiteStudio/Editor/`: `ElementTree`, `StyleValues`, `Findings`, `Headings`, `ConsistencyChecker`, `AccessibilityChecker`, `PageChecks`
+- `includes/WebsiteStudio/Sections/`: `SectionLocator`, `SectionTransforms`, `SectionWriter`, `Proposals`, `RegenerateJob`
+- `includes/WebsiteStudio/History/`: `RevisionDiff`, `RevisionService`
+- `includes/WebsiteStudio/Library/DesignLibrary.php`
+- `includes/WebsiteStudio/Preview/PreviewManager.php`
+- `includes/WebsiteStudio/Persistence/`: `RevisionRepository`, `LibraryRepository`
+- `includes/REST/`: `PageToolsController`, `DesignLibraryController`
+- `tests/unit/StudioToolsTest.php`
+
+Changed:
+- `Engine/DraftManager.php` (revisions, `validate()`)
+- `Engine/DraftException.php`
+- `Engine/PageBuilder.php` (tokens stored, `mapper()`)
+- `Engine/ElementorMapper.php` (`DEFAULT_SCALE` public)
+- `Engine/PostGateway.php`
+- `StudioServices.php`
+- `StudioTables.php` and `Core/Migrations.php` (DB 8)
+- `uninstall.php`
+- `Generator/PageGenerator.php`, `ContentLayoutMapper.php` and `GeneratedImages.php`
+- `Analysis/PageCatalog.php` (preview pages hidden)
+- `Core/Plugin.php`
+- `Admin/WebsiteStudioPage.php`
+- `assets/website-studio/*`
+- version files, docs
+- tests (fakes, bootstrap)
 
 ## Files changed in 1.9.0-beta.3
 
@@ -113,11 +149,19 @@ Changed:
 
 - `php -l` on every PHP file: no syntax errors (PHP 8.3).
 - `node --check assets/website-studio/studio.js`: OK.
-- `php tests/run.php`: **77 passed, 0 failed**.
+- `php tests/run.php`: **88 passed, 0 failed**.
+- Page Tools and Design Library screens rendered in Chromium (React 18, stubbed WordPress components, REST answers produced by the real PHP services): preview device switch, section regeneration → proposal → preview → approve, consistency and accessibility checks with fixes (including entered alt text), revision compare and undo section, library insert/duplicate/edit; no console errors.
 - AI Page Generator screen rendered in Chromium (React 18, stubbed WordPress components and REST): brief → review → approve a link → draft → image review; no console errors, and the REST bodies sent are the ones the endpoints expect.
 - Converter benchmark: a page with about 2,000 elements and 1,500 CSS rules converts in 0.12 s (12 MB peak).
 
 ## Known limitations
+
+- **Phase 7 tools.**
+  - Section regeneration needs the design document, so it works on pages built by the studio's engine (generator, HTML, screenshot); cloned pages can use every other tool.
+  - Regenerating a section rebuilds it from its design document: edits made in Elementor inside that section are replaced (the previous state is a revision and can be restored). Fixes and image approvals change the Elementor data, not the design document.
+  - The consistency checker reads explicit settings and kit globals; styles that come only from the theme or custom CSS are not compared. Contrast is computed only where both colours are known.
+  - Preview frames scroll to a section only when the admin and the site share an origin.
+  - Pages created before 1.9.0-beta.4 have no stored build tokens; regeneration then uses their brand profile or the kit colours.
 
 - **AI Page Generator (phase 6).**
   - Copy quality and fact discipline depend on the model; the prompt forbids invented facts and the review lists numbers and placeholders, but the user must check them before publishing.

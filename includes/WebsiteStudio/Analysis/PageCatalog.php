@@ -44,13 +44,18 @@ class PageCatalog {
 		if ( '' !== $search ) {
 			$query_args['s'] = mb_substr( $search, 0, 100 );
 		}
+		// Temporary AI Studio preview pages are never offered.
+		$query_args['meta_query'] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- admin-only listing.
+			array(
+				'key'     => '_aiscs_preview',
+				'compare' => 'NOT EXISTS',
+			),
+		);
 		$builder = (string) ( $args['builder'] ?? '' );
 		if ( 'elementor' === $builder ) {
-			$query_args['meta_query'] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- indexed meta key, admin-only listing.
-				array(
-					'key'   => '_elementor_edit_mode',
-					'value' => 'builder',
-				),
+			$query_args['meta_query'][] = array(
+				'key'   => '_elementor_edit_mode',
+				'value' => 'builder',
 			);
 		}
 

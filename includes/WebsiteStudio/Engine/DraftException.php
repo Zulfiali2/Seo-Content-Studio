@@ -32,7 +32,8 @@ final class DraftException extends \RuntimeException {
 		return match ( $this->reason ) {
 			'forbidden'                                  => 403,
 			'not_found'                                  => 404,
-			'not_studio_page', 'published'               => 409,
+			'not_studio_page', 'published', 'not_regenerable', 'section_missing', 'section_changed', 'no_proposal', 'proposal_closed', 'not_built', 'no_snapshot', 'needs_containers' => 409,
+			'invalid_request'                            => 400,
 			'invalid_document'                           => 422,
 			'elementor_inactive', 'elementor_too_old', 'widgets_missing' => 424,
 			default                                      => 500,

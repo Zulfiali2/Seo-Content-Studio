@@ -33,6 +33,11 @@ if ( ! function_exists( '__' ) ) {
 		return $text;
 	}
 }
+if ( ! function_exists( '_n' ) ) {
+	function _n( $single, $plural, $number, $domain = '' ) {
+		return 1 === (int) $number ? $single : $plural;
+	}
+}
 
 require dirname( __DIR__ ) . '/includes/Autoloader.php';
 AiSeoContentStudio\Autoloader::register( 'AiSeoContentStudio\\', dirname( __DIR__ ) . '/includes/' );

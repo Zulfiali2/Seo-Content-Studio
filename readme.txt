@@ -4,7 +4,7 @@ Tags: seo, ai, content, elementor, keyword research
 Requires at least: 6.6
 Tested up to: 6.7
 Requires PHP: 8.2
-Stable tag: 1.9.0-beta.3
+Stable tag: 1.9.0-beta.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -54,6 +54,9 @@ Nothing is sent until you add a key and run an action.
 3. Go to AI SEO Studio → AI Providers, save an API key, run "Test connection", choose a text model and a default provider.
 
 == Changelog ==
+
+= 1.9.0-beta.4 =
+* AI Website Studio phase 7. Page Tools for studio drafts: device preview (desktop, tablet, mobile, one section), section regeneration (rewrite, improve SEO, redesign, new images, colours, typography, layout, spacing, responsive) with a preview before you approve, a Design Consistency Checker and an Accessibility Checker (WCAG 2.2 AA based) whose recommendations you apply one by one, full revision history with compare, restore and undo of one section, and a Design Library of reusable sections and components.
 
 = 1.9.0-beta.3 =
 * AI Website Studio phase 6: AI Page Generator. Describe a page (topic, keywords, intent, audience, location, tone, length, sections, facts) and the AI writes it as a native Elementor draft: sections, copy, SEO title and description, image prompts and internal link suggestions. You review it first, approve each internal link, and AI images are only placed in the draft after you choose them. The layout is fitted to the content (columns by card count and text length, one H1, FAQ in one column), and numbers or placeholders the AI wrote are listed for you to check.

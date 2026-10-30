@@ -25,12 +25,14 @@ final class ContentLayoutMapper {
 	/**
 	 * Adjust a PageDocument input.
 	 *
-	 * @param array<string, mixed> $doc Document (from PageGenerator::toDocument()).
+	 * @param array<string, mixed> $doc  Document (from PageGenerator::toDocument()).
+	 * @param bool                 $page Whole page (false: single sections being regenerated, where
+	 *                                   the page's H1 is decided by the caller).
 	 * @return array{document: array<string, mixed>, changes: list<array{section: int, change: string}>}
 	 */
-	public static function adapt( array $doc ): array {
+	public static function adapt( array $doc, bool $page = true ): array {
 		$changes = array();
-		$h1      = self::ensureOneH1( $doc );
+		$h1      = $page ? self::ensureOneH1( $doc ) : '';
 		if ( '' !== $h1 ) {
 			$changes[] = array(
 				'section' => 0,

@@ -73,7 +73,17 @@ class GeneratedImages {
 		}
 		if ( array() !== $swapped ) {
 			// Cloned mode: the user may have added any widget in Elementor since the draft was made.
-			$this->studio->drafts()->update( $page_id, $elements, $user_id, DocumentValidator::MODE_CLONED );
+			$this->studio->drafts()->update(
+				$page_id,
+				$elements,
+				$user_id,
+				DocumentValidator::MODE_CLONED,
+				array(
+					'action'  => 'images',
+					/* translators: %d: number of images. */
+					'summary' => sprintf( _n( '%d AI image placed', '%d AI images placed', count( $swapped ), 'ai-seo-content-studio' ), count( $swapped ) ),
+				)
+			);
 			foreach ( $swapped as $i => $new ) {
 				$slot = $studio['images'][ $i ];
 				$this->site->attach( $new, $page_id );

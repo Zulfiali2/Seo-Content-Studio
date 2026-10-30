@@ -51,12 +51,28 @@ final class StudioTables {
 	}
 
 	/**
+	 * Page revisions table.
+	 */
+	public static function revisions(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'aiscs_page_revisions';
+	}
+
+	/**
+	 * Design library table.
+	 */
+	public static function library(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'aiscs_design_library';
+	}
+
+	/**
 	 * All table names (uninstall).
 	 *
 	 * @return string[]
 	 */
 	public static function all(): array {
-		return array( self::profiles(), self::analyses(), self::pages(), self::audit() );
+		return array( self::profiles(), self::analyses(), self::pages(), self::audit(), self::revisions(), self::library() );
 	}
 
 	/**
@@ -69,8 +85,46 @@ final class StudioTables {
 		$profiles = self::profiles();
 		$analyses = self::analyses();
 		$audit    = self::audit();
-		$pages    = self::pages();
+		$pages     = self::pages();
+		$revisions = self::revisions();
+		$library   = self::library();
 		return array(
+			"CREATE TABLE {$revisions} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  page_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  project_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  revision int(10) unsigned NOT NULL DEFAULT 1,
+  action varchar(32) NOT NULL,
+  summary varchar(255) NOT NULL DEFAULT '',
+  section_id varchar(64) NOT NULL DEFAULT '',
+  meta text NOT NULL,
+  elements_hash char(32) NOT NULL DEFAULT '',
+  snapshot longtext NOT NULL,
+  snapshot_bytes int(10) unsigned NOT NULL DEFAULT 0,
+  created_by bigint(20) unsigned NOT NULL DEFAULT 0,
+  created_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  UNIQUE KEY page_revision (page_id,revision),
+  KEY created_at (created_at)
+) {$charset};",
+			"CREATE TABLE {$library} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  owner_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  project_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  name varchar(191) NOT NULL,
+  kind varchar(16) NOT NULL DEFAULT 'section',
+  category varchar(32) NOT NULL DEFAULT 'other',
+  profile_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  source_page_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  elements longtext NOT NULL,
+  summary text NOT NULL,
+  uses_containers tinyint(1) unsigned NOT NULL DEFAULT 1,
+  created_at datetime NOT NULL,
+  updated_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  KEY owner_updated (owner_id,updated_at),
+  KEY category (category)
+) {$charset};",
 			"CREATE TABLE {$pages} (
   id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   project_id bigint(20) unsigned NOT NULL DEFAULT 0,

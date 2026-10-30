@@ -340,3 +340,108 @@ Replaces each slot's current image with its candidate in the draft's current Ele
 ## POST /design/generate/{project_id}/images/{slot}/discard
 
 Deletes the slot's unapproved candidate.
+
+
+---
+
+# Phase 7: page tools, revisions and design library (1.9.0-beta.4)
+
+Every `/design/pages/{id}/…` route requires `aiscs_generate_content` and `edit_post` on the page (a page or post, not trashed). Reading works on any such page. Writing goes through `DraftManager`, which changes only studio-made drafts (409 `aiscs_not_studio_page` or `aiscs_published` otherwise).
+
+## GET /design/pages/{id}/overview
+
+```json
+{ "page": { "id": 12, "title": "", "status": "draft", "studio": true, "generation_type": "generated", "writable": true,
+            "not_writable": "", "elementor": true, "elementor_url": "", "preview_url": "" },
+  "regenerable": true,
+  "sections": [ { "section_id": "services", "index": 1, "type": "cards", "element_id": "a1b2c3d", "count": 1, "present": true, "label": "What we do" } ],
+  "outline":  [ { "id": "a1b2c3d", "type": "container", "label": "What we do", "widgets": 9 } ],
+  "image_ready": true }
+```
+
+## GET|POST /design/pages/{id}/preview
+
+Returns `{ preview_url, elementor_url, devices: { desktop: 1280, tablet: 768, mobile: 390 } }`. This has no side effects. The preview link is WordPress's own, which needs a logged-in user who may edit the page.
+
+## POST /design/pages/{id}/consistency-check
+
+Body: `profile_id` (the user's own) or `reference_page_ids` (1–5 pages the user may edit; analysed and merged), else the page's build tokens or the Elementor kit.
+
+```json
+{ "reference": "profile|reference_pages|page|site", "score": 85,
+  "categories": { "colors": { "status": "pass|warning|fail|not_checked", "issues": 0 }, "...": {} },
+  "findings": [ { "id": "c1a2b3c4d5e6f", "category": "buttons", "severity": "warning", "message": "", "elements": ["a1b2c3d"],
+                  "fix": { "label": "Set the corner radius to 8px", "needs_value": false, "suggestion": "" } } ] }
+```
+
+Categories: `colors`, `typography`, `buttons`, `cards`, `spacing`, `widths`, `images`, `headings`, `patterns`, `responsive`.
+
+## POST /design/pages/{id}/consistency/apply
+
+Body: the same reference fields, plus `fix_ids` (≤100).
+
+The findings are recomputed from the page as it is now, and only matching ids are applied. Returns `{ applied, skipped, revision }`; `skipped` holds ids that are no longer found.
+
+## POST /design/pages/{id}/accessibility-check
+
+Returns `{ target: "WCAG 2.2 AA", notice, categories: { headings|images|links|contrast|readability|forms|keyboard|media: { errors, warnings, recommendations } }, findings }`. The findings have the same shape as above, with ids that start with `a`.
+
+## POST /design/pages/{id}/accessibility/apply
+
+Body:
+- `fix_ids`.
+- `values`: `{ "a…": "text" }`, ≤250 characters each, for fixes with `needs_value`.
+
+Alt text is written to the attachment when the user may edit it.
+
+## POST /design/pages/{id}/sections/{section_id}/regenerate
+
+Body: `action` (required) and its options.
+
+| `action` | Kind | Options |
+|---|---|---|
+| `rewrite`, `seo` | AI | `instruction` ≤1000, `primary_keyword` |
+| `redesign` | AI | `instruction` |
+| `image` | AI | `prompt` ≤1500, `image_index` (−1 = up to 3 images); needs `upload_files` and an image provider |
+| `colors` | Style | `background`: `""`, `surface`, `primary`, `secondary` or `dark` |
+| `typography` | Style | `scale`: `smaller`, `larger` or `default`; `font` |
+| `layout` | Style | `kind`: `stack`, `split` or `grid`; `columns` 0–6 |
+| `spacing` | Style | `spacing`: `compact`, `normal` or `spacious` |
+| `responsive` | Style | — |
+
+- Style actions return 201 `{ project_id, proposal }`.
+- AI actions return 202 `{ project_id, job }`.
+
+Errors:
+- 409 `aiscs_not_regenerable`: a cloned page without a design document.
+- 409 `aiscs_section_missing`: the section was removed in Elementor.
+- 400 `aiscs_invalid_option`: for example "two halves" for a section that is not two parts.
+
+## Proposals
+
+`GET /design/proposals/{id}` returns `{ project_id, page_id, section_id, action, status, job, proposal }`.
+
+The `proposal` object is `{ page_id, section_id, element_id, summary, action, provider, model, report, images, texts, status }`.
+
+The project owner can then call:
+- `POST …/preview`: returns `{ preview_url, element_id }`. The temporary page shows the whole page with the proposal in place.
+- `POST …/approve`: returns the DraftManager result with `revision`. 409 `aiscs_section_changed` means the section was changed in Elementor since the proposal.
+- `POST …/discard`.
+
+## Revisions
+
+- `GET /design/pages/{id}/revisions`: returns `{ items: [ { revision, action, summary, section_id, meta, bytes, restorable, created_by, created_at } ], edited_since }`.
+- `GET /design/pages/{id}/revisions/compare?from=N&to=M`: `to=0` means the page now. Returns `{ from, to, diff: { added, removed, changed: [ { id, label, text_added, text_removed, style_only } ], moved, unchanged }, outline_from, outline_to }`.
+- `POST /design/pages/{id}/revisions/{n}/restore`
+- `POST /design/pages/{id}/revisions/{n}/sections/{element_id}/restore`: puts one top-level element back, or re-inserts it at its old position.
+
+## Design library
+
+Every route requires `aiscs_generate_content`. Item routes require the owner (or `aiscs_manage_settings`).
+
+- `GET /design/library?kind=section|component&category=`
+- `POST /design/library`: body `{ page_id, element_id, name, category, profile_id }`, and the user must be able to edit the page. Returns 201 with the item.
+- `GET`, `PUT` (`name`, `category`) and `DELETE /design/library/{id}`. Items carry `summary` and `outline`, never the raw tree.
+- `POST /design/library/{id}/duplicate`
+- `POST /design/library/{id}/preview`: returns `{ preview_id, preview_url }`.
+- `POST /design/library/{id}/insert`: body `{ page_id, position }`, where −1 means the end. 409 `aiscs_needs_containers` when the item needs Flexbox Containers and the site does not have them.

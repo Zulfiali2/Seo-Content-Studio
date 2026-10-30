@@ -36,7 +36,7 @@ final class PageGenerator {
 
 	public const MAX_IMAGES = 8;
 
-	private const BACKGROUNDS = array( '', 'surface', 'primary', 'secondary', 'dark' );
+	public const BACKGROUNDS = array( '', 'surface', 'primary', 'secondary', 'dark' );
 
 	/**
 	 * The generation request.
@@ -57,11 +57,9 @@ final class PageGenerator {
 				"- About $sections sections and $words words of visible text in total. Start with a hero: one h1 heading (the only h1 on the page, at most 10 words, with the primary keyword), a short supporting paragraph and one or two buttons. End with a call-to-action section.",
 				'- Choose sections that suit the search intent: benefits or services as cards, how it works as steps, about, FAQ (4-6 real questions searchers ask, each with a complete answer of 30-70 words), call to action. If "requested_sections" is given, use those section types in that order.',
 				'- Layout: "stack" for one column of content; "split" for exactly two side-by-side groups (typically text and an image); "grid" for repeated cards. Put a section heading and intro in "header" and each card or column in "groups". Grids hold 3, 4 or 6 cards of similar length; card text 15-40 words; card titles 2-6 words.',
-				'- Each section names a background role: "" (page background), "surface" (light tint, use it to alternate sections), "primary", "secondary" or "dark" (for a hero or call to action). Never give colour values.',
 				'- Headings: h2 for section headings, h3 for card titles. Use the primary keyword in the h1 and naturally in at least one h2; use secondary keywords where they read naturally; never stuff keywords.',
-				'- Text elements are plain text; separate paragraphs with a blank line. No HTML, no markdown. Buttons: 1-4 words, an action. Icons: a Font Awesome solid name from this list only: ' . implode( ', ', PageDocument::ICONS ) . '.',
 				"- Images: at most $images image elements in the whole page (0 means none). Each needs \"text\" (alt text describing the image, 5-15 words) and \"prompt\" (a detailed prompt for an AI image generator: subject, setting, composition, lighting, photographic style; no text, letters, logos or watermarks in the image; no identifiable real people or brands). Use aspect 3:2 for wide images, 1:1 for square, 2:3 for tall.",
-				'- Never invent business facts: no prices, statistics, percentages, years in business, client counts, awards, certifications, guarantees, testimonials, reviews, client names, addresses, phone numbers or e-mail addresses. Use only facts in "business" and "notes". Do not create testimonials or statistics sections unless the notes contain the real testimonials or figures. If the page needs a fact you do not have, write a visible placeholder in square brackets, e.g. "[Add your phone number]", and list it in "assumptions".',
+				...self::contentRules(),
 				'- link_suggestions: up to 5 internal links, only to pages in "internal_pages" (use their id as target_id) that are genuinely relevant. The anchor must be an exact phrase of 2-6 words that appears in a text element of the section you name (section = zero-based section index). Do not link from headings or buttons. Use [] when none fit.',
 				'- meta_title: at most 60 characters with the primary keyword. meta_description: 140-160 characters with the primary keyword, describing the page honestly. slug: 2-6 lowercase words joined by hyphens.',
 				'- Write for the stated audience, intent and location, in the language of the brief, with the requested tone.',
@@ -105,33 +103,72 @@ final class PageGenerator {
 	}
 
 	/**
+	 * Content and formatting rules shared with section regeneration.
+	 *
+	 * @return list<string>
+	 */
+	public static function contentRules(): array {
+		return array(
+			'- Each section names a background role: "" (page background), "surface" (light tint, use it to alternate sections), "primary", "secondary" or "dark" (for a hero or call to action). Never give colour values.',
+			'- Text elements are plain text; separate paragraphs with a blank line. No HTML, no markdown. Buttons: 1-4 words, an action. Icons: a Font Awesome solid name from this list only: ' . implode( ', ', PageDocument::ICONS ) . '.',
+			'- Never invent business facts: no prices, statistics, percentages, years in business, client counts, awards, certifications, guarantees, testimonials, reviews, client names, addresses, phone numbers or e-mail addresses. Use only facts in "business" and "notes". Do not create testimonials or statistics sections unless the notes contain the real testimonials or figures. If the page needs a fact you do not have, write a visible placeholder in square brackets, e.g. "[Add your phone number]", and list it in "assumptions".',
+		);
+	}
+
+	/**
 	 * Strict-mode schema (no recursion: groups hold leaf elements only).
 	 *
 	 * @return array<string, mixed>
 	 */
 	public static function schema(): array {
 		$str  = array( 'type' => 'string' );
+		$int  = array( 'type' => 'integer' );
+		$list = static fn ( array $items ): array => array(
+			'type'  => 'array',
+			'items' => $items,
+		);
+		return self::object(
+			array(
+				'page_title'       => $str,
+				'meta_title'       => $str,
+				'meta_description' => $str,
+				'slug'             => $str,
+				'sections'         => $list( self::sectionSchema() ),
+				'link_suggestions' => $list(
+					self::object(
+						array(
+							'target_id' => $int,
+							'anchor'    => $str,
+							'section'   => $int,
+							'reason'    => $str,
+						)
+					)
+				),
+				'assumptions'      => $list( $str ),
+			)
+		);
+	}
+
+	/**
+	 * Schema of one section (also used by section regeneration).
+	 *
+	 * @return array<string, mixed>
+	 */
+	public static function sectionSchema(): array {
+		$str  = array( 'type' => 'string' );
 		$strs = array(
 			'type'  => 'array',
 			'items' => $str,
 		);
-		$int  = array( 'type' => 'integer' );
 		$enum = static fn ( array $values ): array => array(
 			'type' => 'string',
 			'enum' => $values,
-		);
-		$obj  = static fn ( array $props ): array => array(
-			'type'                 => 'object',
-			'additionalProperties' => false,
-			'required'             => array_keys( $props ),
-			'properties'           => $props,
 		);
 		$list = static fn ( array $items ): array => array(
 			'type'  => 'array',
 			'items' => $items,
 		);
-
-		$leaf    = $obj(
+		$leaf = self::object(
 			array(
 				'type'    => $enum( array( 'heading', 'text', 'button', 'image', 'icon', 'list', 'accordion', 'divider' ) ),
 				'level'   => $enum( array( '', 'h1', 'h2', 'h3', 'h4' ) ),
@@ -144,16 +181,16 @@ final class PageGenerator {
 				'prompt'  => $str,
 			)
 		);
-		$section = $obj(
+		return self::object(
 			array(
 				'type'       => $enum( PageDocument::SECTION_TYPES ),
 				'layout'     => $enum( array( 'stack', 'split', 'grid' ) ),
-				'columns'    => $int,
+				'columns'    => array( 'type' => 'integer' ),
 				'background' => $enum( self::BACKGROUNDS ),
 				'align'      => $enum( array( 'left', 'center' ) ),
 				'header'     => $list( $leaf ),
 				'groups'     => $list(
-					$obj(
+					self::object(
 						array(
 							'card'     => array( 'type' => 'boolean' ),
 							'elements' => $list( $leaf ),
@@ -162,25 +199,20 @@ final class PageGenerator {
 				),
 			)
 		);
-		return $obj(
-			array(
-				'page_title'       => $str,
-				'meta_title'       => $str,
-				'meta_description' => $str,
-				'slug'             => $str,
-				'sections'         => $list( $section ),
-				'link_suggestions' => $list(
-					$obj(
-						array(
-							'target_id' => $int,
-							'anchor'    => $str,
-							'section'   => $int,
-							'reason'    => $str,
-						)
-					)
-				),
-				'assumptions'      => $strs,
-			)
+	}
+
+	/**
+	 * Strict object schema.
+	 *
+	 * @param array<string, mixed> $props Properties.
+	 * @return array<string, mixed>
+	 */
+	private static function object( array $props ): array {
+		return array(
+			'type'                 => 'object',
+			'additionalProperties' => false,
+			'required'             => array_keys( $props ),
+			'properties'           => $props,
 		);
 	}
 

@@ -62,7 +62,7 @@ Baseline audited: **AI SEO Content Studio 1.6.8**, the uploaded ZIP. The brief n
 | 4 | HTML/CSS → Elementor (reuses `CssParser`) | **Done (1.9.0-beta.1)**, unit tests only |
 | 5 | Screenshot → design (vision) | **Done (1.9.0-beta.2)**, unit tests only |
 | 6 | Content-to-design generation, section images, internal links | **Done (1.9.0-beta.3)**, unit tests only |
-| 7 | Consistency checker, accessibility checker, section regeneration, preview, revisions, design library | Not started |
+| 7 | Consistency checker, accessibility checker, section regeneration, preview, revisions, design library | **Done (1.9.0-beta.4)**, unit tests only |
 | 8 | QA, live WP/Elementor matrix, packaging | Not started |
 
 ## 5. Phase 1 design (implemented)
@@ -148,4 +148,19 @@ studio_generate_build: placeholders (PlaceholderImage + MediaImporter)
      -> SiteGateway::saveSeo, attach placeholders -> image slots
 studio_page_images: ImageGenerationService -> MediaImporter (candidate only)
 POST .../images/apply: GeneratedImages::swap on the live Elementor data -> DraftManager::update (MODE_CLONED)
+```
+
+## 10. Phase 7 design (implemented in 1.9.0-beta.4)
+
+```
+DraftManager::create/update ──> RevisionRepository (snapshot: elements + document + section_map; outside edits captured first)
+Page Tools
+  overview ── SectionLocator (section_map → top-level element span)
+  checks ──── PageChecks → ConsistencyChecker | AccessibilityChecker → Findings (server-side ops) → apply by id → DraftManager::update (fix)
+  regenerate ─ style: SectionTransforms ─┐
+               AI: RegenerateJob → SectionWriter (one section, strict JSON) / ImageGenerationService
+                                        └→ Proposals::build (PageBuilder::mapper()->mapSection, validate generated)
+               preview: PreviewManager (temporary draft) · approve: replaceTop → DraftManager::update (regenerate) · discard
+  revisions ── RevisionService (RevisionDiff compare, restore, restoreSection)
+Design library ── DesignLibrary (save from page, wrap components, ElementTreeCopier with reserved ids, insert → DraftManager::update)
 ```

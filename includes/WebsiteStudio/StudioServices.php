@@ -17,6 +17,7 @@ use AiSeoContentStudio\WebsiteStudio\Engine\PageBuilder;
 use AiSeoContentStudio\WebsiteStudio\Engine\PostGateway;
 use AiSeoContentStudio\WebsiteStudio\Persistence\AuditLog;
 use AiSeoContentStudio\WebsiteStudio\Persistence\GeneratedPageRepository;
+use AiSeoContentStudio\WebsiteStudio\Persistence\RevisionRepository;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -37,6 +38,7 @@ final class StudioServices {
 		private readonly GeneratedPageRepository $pages = new GeneratedPageRepository(),
 		private readonly AuditLog $audit = new AuditLog(),
 		private readonly PostGateway $posts = new PostGateway(),
+		private readonly RevisionRepository $revisions = new RevisionRepository(),
 	) {}
 
 	public function bridge(): ElementorBridgeInterface {
@@ -52,7 +54,15 @@ final class StudioServices {
 	}
 
 	public function drafts(): DraftManager {
-		return $this->drafts ??= new DraftManager( $this->bridge, $this->compat(), new DocumentValidator( $this->compat() ), $this->pages, $this->audit, $this->posts );
+		return $this->drafts ??= new DraftManager( $this->bridge, $this->compat(), new DocumentValidator( $this->compat() ), $this->pages, $this->audit, $this->posts, $this->revisions );
+	}
+
+	public function revisions(): RevisionRepository {
+		return $this->revisions;
+	}
+
+	public function posts(): PostGateway {
+		return $this->posts;
 	}
 
 	public function cloner(): PageCloner {

@@ -36,7 +36,7 @@ final class ElementorMapper {
 	);
 
 	/** Fallback type scale (px) when a profile has none. */
-	private const DEFAULT_SCALE = array(
+	public const DEFAULT_SCALE = array(
 		'h1'   => 48,
 		'h2'   => 36,
 		'h3'   => 26,
