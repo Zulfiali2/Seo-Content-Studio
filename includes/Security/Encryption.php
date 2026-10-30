@@ -35,6 +35,24 @@ class Encryption {
 	/**
 	 * Build from AISCS_ENCRYPTION_KEY if defined, otherwise derive from WordPress salts.
 	 */
+	/**
+	 * The key used before a rotation, so stored credentials can still be read and are
+	 * re-encrypted with the current key on first use.
+	 *
+	 * Rotation: copy the old AISCS_ENCRYPTION_KEY value to AISCS_ENCRYPTION_KEY_PREVIOUS, set a
+	 * new AISCS_ENCRYPTION_KEY, then open AI Providers once. Use the value "wp-salts" when the
+	 * old key was the default derived from the WordPress salts (no AISCS_ENCRYPTION_KEY before)
+	 * or before changing the salts. Remove the constant once every key reads correctly.
+	 */
+	public static function previousFromEnvironment(): ?self {
+		if ( ! defined( 'AISCS_ENCRYPTION_KEY_PREVIOUS' ) || '' === (string) constant( 'AISCS_ENCRYPTION_KEY_PREVIOUS' ) ) {
+			return null;
+		}
+		$previous = (string) constant( 'AISCS_ENCRYPTION_KEY_PREVIOUS' );
+		$material = 'wp-salts' === $previous ? wp_salt( 'auth' ) . wp_salt( 'secure_auth' ) : $previous;
+		return new self( hash_hmac( 'sha256', 'aiscs-credentials-v1', $material, true ) );
+	}
+
 	public static function fromEnvironment(): self {
 		if ( defined( 'AISCS_ENCRYPTION_KEY' ) && '' !== (string) constant( 'AISCS_ENCRYPTION_KEY' ) ) {
 			$material = (string) constant( 'AISCS_ENCRYPTION_KEY' );

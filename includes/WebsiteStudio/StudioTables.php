@@ -1,0 +1,108 @@
+<?php
+/**
+ * AI Website Studio database tables.
+ *
+ * @package AiSeoContentStudio
+ */
+
+namespace AiSeoContentStudio\WebsiteStudio;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Table names and dbDelta schema for the Website Studio module.
+ *
+ * Projects, usage and credentials keep their existing storage; these tables only hold
+ * data that has no home there: reusable brand profiles, cached page analyses and an
+ * audit trail of studio actions.
+ */
+final class StudioTables {
+
+	/**
+	 * Brand profiles table.
+	 */
+	public static function profiles(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'aiscs_brand_profiles';
+	}
+
+	/**
+	 * Design analyses table.
+	 */
+	public static function analyses(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'aiscs_design_analyses';
+	}
+
+	/**
+	 * Audit log table.
+	 */
+	public static function audit(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'aiscs_audit_log';
+	}
+
+	/**
+	 * All table names (uninstall).
+	 *
+	 * @return string[]
+	 */
+	public static function all(): array {
+		return array( self::profiles(), self::analyses(), self::audit() );
+	}
+
+	/**
+	 * CREATE TABLE statements in dbDelta format (two spaces before PRIMARY KEY, one field per line).
+	 *
+	 * @param string $charset Charset/collation clause.
+	 * @return string[]
+	 */
+	public static function schema( string $charset ): array {
+		$profiles = self::profiles();
+		$analyses = self::analyses();
+		$audit    = self::audit();
+		return array(
+			"CREATE TABLE {$profiles} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  owner_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  project_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  name varchar(191) NOT NULL,
+  schema_version smallint(5) unsigned NOT NULL DEFAULT 1,
+  tokens longtext NOT NULL,
+  source_pages text NOT NULL,
+  created_at datetime NOT NULL,
+  updated_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  KEY owner_updated (owner_id,updated_at),
+  KEY project_id (project_id)
+) {$charset};",
+			"CREATE TABLE {$analyses} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  owner_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  project_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  source_page_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  source_hash char(64) NOT NULL DEFAULT '',
+  analyzer_version smallint(5) unsigned NOT NULL DEFAULT 1,
+  profile_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  status varchar(16) NOT NULL DEFAULT 'complete',
+  analysis longtext NOT NULL,
+  created_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  KEY source_lookup (source_page_id,source_hash),
+  KEY owner_created (owner_id,created_at)
+) {$charset};",
+			"CREATE TABLE {$audit} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  created_at datetime NOT NULL,
+  user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  action varchar(64) NOT NULL,
+  object_type varchar(32) NOT NULL DEFAULT '',
+  object_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  details text NOT NULL,
+  PRIMARY KEY  (id),
+  KEY created_at (created_at),
+  KEY object_lookup (object_type,object_id)
+) {$charset};",
+		);
+	}
+}

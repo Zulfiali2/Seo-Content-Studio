@@ -67,4 +67,18 @@ interface ElementorBridgeInterface {
 	 * @param int $post_id Post.
 	 */
 	public function editUrl( int $post_id ): string;
+
+	/**
+	 * Whether a post is currently edited with Elementor.
+	 *
+	 * @param int $post_id Post ID.
+	 */
+	public function isBuiltWithElementor( int $post_id ): bool;
+
+	/**
+	 * Stored settings of the active Elementor kit (global colours, typography, theme style).
+	 *
+	 * @return array{id: int, modified: string, settings: array<string, mixed>}
+	 */
+	public function activeKit(): array;
 }

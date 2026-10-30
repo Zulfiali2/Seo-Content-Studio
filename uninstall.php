@@ -49,6 +49,11 @@ function aiscs_uninstall_site() {
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}aiscs_usage_log" );
+	// AI Website Studio tables (see includes/WebsiteStudio/StudioTables.php).
+	foreach ( array( 'aiscs_brand_profiles', 'aiscs_design_analyses', 'aiscs_audit_log' ) as $aiscs_table ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}{$aiscs_table}" );
+	}
 
 	foreach ( array_keys( wp_roles()->roles ) as $role_name ) {
 		$role = get_role( $role_name );

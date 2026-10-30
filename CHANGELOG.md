@@ -2,6 +2,23 @@
 
 All notable changes to AI SEO Content Studio. Versions follow semantic versioning.
 
+## 1.7.0 — 2026-10-30 — AI Website Studio, phase 1: brand analysis
+
+Added
+- AI Website Studio admin menu (Dashboard, Website Brand Analyzer, Brand Profiles). Its interface uses WordPress's bundled React packages and needs no build step.
+- Website Brand Analyzer: choose up to 10 pages you can edit. Elementor pages are read from their Elementor document and the active kit (global colours and typography, theme style, breakpoints), with `__globals__` references resolved. Block and classic pages are read from their blocks or headings. theme.json styles, the theme stylesheet and Elementor's generated CSS files are also read. Everything is read locally: no AI request and no HTTP request. Results are cached until the page, kit, theme or global styles change.
+- Section detection: hero, cards/services, CTA, FAQ, testimonials, contact, image grid, statistics, header, footer and content. Structure report: containers or legacy sections, nesting depth, widget counts, responsive settings, global references, custom CSS, and widgets not available on the site.
+- Brand profiles: a versioned design-token schema (colours, palette, fonts, type scale per device, buttons, cards, images, section padding, container width, breakpoints). Each group records its source. Profiles can be edited, duplicated and deleted; every value is validated.
+- REST: `GET /pages/available`, `POST /website/analyze`, `GET /website/analysis/{id}`, and `GET|POST /website/brand-profiles` and `GET|PUT|DELETE /website/brand-profiles/{id}`. Ownership is checked on every object, and edit permission on every page.
+- Audit log of studio actions (analyses, profile create/update/delete), pruned with the usage-log retention setting.
+- Database version 6: tables `aiscs_brand_profiles`, `aiscs_design_analyses` and `aiscs_audit_log`, removed on uninstall when data deletion is on.
+
+Security
+- Credential key rotation: with `AISCS_ENCRYPTION_KEY_PREVIOUS` (the old key, or `wp-salts`), stored API keys that the current key cannot open are read with the previous key and re-encrypted with the current one.
+
+Tests
+- Dependency-free unit tests (`php tests/run.php`): token validation, CSS parser, Elementor and block analyzers, brand extraction, repositories, REST permission callbacks (401/403/404, IDOR), and key rotation.
+
 ## 1.6.8 — 2026-10-30 — Security hardening, SEO plugin sync, same-keyword warning
 
 Security

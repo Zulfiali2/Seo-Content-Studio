@@ -125,4 +125,40 @@ class ElementorBridge implements ElementorBridgeInterface {
 		$document = $e->documents->get( $post_id, false );
 		return $document ? (string) $document->get_edit_url() : '';
 	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function isBuiltWithElementor( int $post_id ): bool {
+		$e = $this->elementor();
+		if ( ! $e ) {
+			return false;
+		}
+		$document = $e->documents->get( $post_id, false );
+		return $document && $document->is_built_with_elementor();
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * Reads the kit's saved settings rather than Kit::get_settings(), which fills in control
+	 * defaults: the analyzers should only see choices the site actually made.
+	 */
+	public function activeKit(): array {
+		$e = $this->elementor();
+		if ( ! $e || ! isset( $e->kits_manager ) ) {
+			return array(
+				'id'       => 0,
+				'modified' => '',
+				'settings' => array(),
+			);
+		}
+		$id       = (int) $e->kits_manager->get_active_id();
+		$settings = $id > 0 ? get_post_meta( $id, '_elementor_page_settings', true ) : array();
+		return array(
+			'id'       => $id,
+			'modified' => $id > 0 ? (string) get_post_field( 'post_modified_gmt', $id ) : '',
+			'settings' => is_array( $settings ) ? $settings : array(),
+		);
+	}
 }

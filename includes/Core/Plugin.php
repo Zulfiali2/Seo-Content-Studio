@@ -8,6 +8,7 @@
 namespace AiSeoContentStudio\Core;
 
 use AiSeoContentStudio\Admin\AdminPage;
+use AiSeoContentStudio\Admin\WebsiteStudioPage;
 use AiSeoContentStudio\Content\BriefJob;
 use AiSeoContentStudio\Content\ContentJob;
 use AiSeoContentStudio\Content\DraftWriter;
@@ -39,6 +40,7 @@ use AiSeoContentStudio\REST\ResearchController;
 use AiSeoContentStudio\REST\SettingsController;
 use AiSeoContentStudio\REST\StatusController;
 use AiSeoContentStudio\REST\UsageController;
+use AiSeoContentStudio\REST\WebsiteStudioController;
 use AiSeoContentStudio\Research\CompetitorFetcher;
 use AiSeoContentStudio\Research\CostEstimates;
 use AiSeoContentStudio\Research\DataForSEO\DataForSeoProvider;
@@ -58,6 +60,12 @@ use AiSeoContentStudio\Settings\SettingsRepository;
 use AiSeoContentStudio\Usage\CostEstimator;
 use AiSeoContentStudio\Usage\UsageLimiter;
 use AiSeoContentStudio\Usage\UsageRepository;
+use AiSeoContentStudio\WebsiteStudio\Analysis\PageCatalog;
+use AiSeoContentStudio\WebsiteStudio\Analysis\SiteDesignSource;
+use AiSeoContentStudio\WebsiteStudio\Analysis\WebsiteAnalyzer;
+use AiSeoContentStudio\WebsiteStudio\Persistence\AnalysisRepository;
+use AiSeoContentStudio\WebsiteStudio\Persistence\AuditLog;
+use AiSeoContentStudio\WebsiteStudio\Persistence\BrandProfileRepository;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -234,7 +242,7 @@ final class Plugin {
 		$this->settings    = new SettingsRepository();
 		$redactor          = new Redactor();
 		$this->logger      = new Logger( $redactor, (bool) $this->settings->get( 'general.debug_logging' ) );
-		$this->credentials = new CredentialStore( Encryption::fromEnvironment() );
+		$this->credentials = new CredentialStore( Encryption::fromEnvironment(), Encryption::previousFromEnvironment() );
 		$redactor->addSecretSource( fn (): array => $this->credentials->allPlaintextSecrets() );
 
 		$this->http = new HttpClient(
@@ -311,6 +319,7 @@ final class Plugin {
 
 		if ( is_admin() ) {
 			( new AdminPage( $this->environment, $this->settings ) )->register();
+			( new WebsiteStudioPage( $this->environment ) )->register();
 		} else {
 			( new MetaOutput( $this->settings, $this->environment ) )->register();
 		}
@@ -337,7 +346,11 @@ final class Plugin {
 	 * Delete usage records older than the retention setting.
 	 */
 	public function pruneUsageLog(): void {
-		$this->usage->prune( (int) $this->settings->get( 'general.usage_retention_days' ) );
+		$days = (int) $this->settings->get( 'general.usage_retention_days' );
+		$this->usage->prune( $days );
+		// Website Studio retention follows the same setting.
+		( new AnalysisRepository() )->prune( $days );
+		( new AuditLog() )->prune( $days );
 	}
 
 	/**
@@ -375,5 +388,16 @@ final class Plugin {
 			$this->projects
 		);
 		( new ImagesController( $projects_controller, $this->projects, $this->jobs, $this->media, $this->images, $stock, $this->credentials ) )->register();
+
+		// AI Website Studio.
+		$design_source = new SiteDesignSource( new ElementorBridge() );
+		$analyses      = new AnalysisRepository();
+		( new WebsiteStudioController(
+			new PageCatalog( $design_source ),
+			new WebsiteAnalyzer( $design_source, $analyses ),
+			$analyses,
+			new BrandProfileRepository(),
+			new AuditLog()
+		) )->register();
 	}
 }

@@ -10,6 +10,7 @@ namespace AiSeoContentStudio\Core;
 use AiSeoContentStudio\Settings\SettingsRepository;
 use AiSeoContentStudio\Settings\SettingsSchema;
 use AiSeoContentStudio\Usage\UsageRepository;
+use AiSeoContentStudio\WebsiteStudio\StudioTables;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -19,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
 final class Migrations {
 
 	/** Current schema version. Bump when the schema changes. */
-	public const DB_VERSION = '5';
+	public const DB_VERSION = '6';
 
 	/** Option storing the installed schema version. */
 	public const OPTION = 'aiscs_db_version';
@@ -73,6 +74,10 @@ final class Migrations {
 
 		$previous = (string) get_option( self::OPTION, '' );
 		dbDelta( $sql );
+		// 6: AI Website Studio tables (brand profiles, design analyses, audit log).
+		foreach ( StudioTables::schema( $charset ) as $studio_sql ) {
+			dbDelta( $studio_sql );
+		}
 		// First run on this site. On multisite, network activation only runs the activation
 		// hook on the main site, and sites created later never run it, so roles are set here.
 		if ( '' === $previous ) {

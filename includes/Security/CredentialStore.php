@@ -34,7 +34,7 @@ class CredentialStore {
 	 *
 	 * @param Encryption $encryption Cipher.
 	 */
-	public function __construct( private readonly Encryption $encryption ) {}
+	public function __construct( private readonly Encryption $encryption, private readonly ?Encryption $previous = null ) {}
 
 	/**
 	 * Store a secret.
@@ -66,6 +66,17 @@ class CredentialStore {
 		if ( ! array_key_exists( $key, $this->plain ) ) {
 			$cipher              = $this->raw()[ $owner ][ $field ] ?? null;
 			$this->plain[ $key ] = is_string( $cipher ) ? $this->encryption->decrypt( $cipher ) : null;
+			// Key rotation: a value the current key cannot open is tried with the previous key
+			// and, when that works, re-encrypted with the current key.
+			if ( null === $this->plain[ $key ] && is_string( $cipher ) && null !== $this->previous ) {
+				$old = $this->previous->decrypt( $cipher );
+				if ( null !== $old ) {
+					$all                     = $this->raw();
+					$all[ $owner ][ $field ] = $this->encryption->encrypt( $old );
+					$this->save( $all );
+					$this->plain[ $key ] = $old;
+				}
+			}
 		}
 		return $this->plain[ $key ];
 	}

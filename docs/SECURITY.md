@@ -124,3 +124,13 @@ Report vulnerabilities privately to the plugin maintainer, not in public issues.
 * Billable operations use expiring locks in the options table. Each lock stores its expiry and a
   random token; a request releases only a lock that still holds its own token, so a request whose
   lock expired cannot remove the lock of the request that took over.
+
+## AI Website Studio (1.7.0)
+
+- **Permissions.** Every route needs `aiscs_generate_content`. Analysing a page needs `edit_post` on every requested page. An analysis can be read only by its owner (or a manager) who can still edit the page. Brand profiles can be read and changed only by their owner (or a manager). Missing objects return 404 before ownership is checked, so the 404/403 difference only tells a user whether an ID exists; it reveals no content.
+- **No outbound requests.** Analysing the site's own pages reads only local data: post content, the Elementor document and kit, theme.json, and stylesheets on disk. A stylesheet is read only when its real path is inside the theme root or the uploads directory, ends in `.css` and is at most 512 KB. The CSS parser never follows `@import` or `url()`. The later Website URL Analyzer must use `HttpClient::fetchPage()` (SSRF validation, redirect re-checks, DNS pinning) and nothing else.
+- **Untrusted values.** Page settings, CSS and REST input pass `DesignTokens` patterns before storage: hex colours, CSS lengths and boxes, a single shadow, plain font names. A value such as `Arial; } body {…}` or `javascript:` is rejected, so tokens can be written into Elementor settings or CSS later without injection.
+- **Bounded work.** At most 10 pages per analysis. CSS input is capped at 1 MB and 5,000 rules, element trees at depth 40, distinct values per signal at 64. Five analyses are kept per page and 100 profiles per user, and analyses and audit entries are pruned with the usage-log retention setting.
+- **Output.** The studio UI renders through React, which escapes text. The admin bootstrap data contains no secrets.
+- **Audit log.** `wp_aiscs_audit_log` records analyses and profile create/update/delete with user, time and object. Content and credentials are never logged.
+- **Credential key rotation.** Define `AISCS_ENCRYPTION_KEY_PREVIOUS` (the old key, or `wp-salts` for the salt-derived default) next to a new `AISCS_ENCRYPTION_KEY`. A key the current key cannot open is decrypted with the previous key and immediately re-encrypted with the new one. Remove the constant after every provider shows its key as readable.

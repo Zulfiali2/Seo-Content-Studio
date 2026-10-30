@@ -1,0 +1,46 @@
+/* AI Website Studio admin styles. Uses WordPress admin colours so it follows the user's scheme. */
+.aiscs-studio { max-width: 1280px; }
+.aiscs-studio h1 { margin-bottom: 16px; }
+.aiscs-studio__notice { margin: 0 0 16px; }
+.aiscs-studio__cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.aiscs-studio__card { background: #fff; border: 1px solid #dcdcde; border-radius: 4px; padding: 16px 20px; }
+.aiscs-studio__card h2 { margin-top: 0; }
+.aiscs-studio__filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin: 16px 0; }
+.aiscs-studio__filters .components-base-control { min-width: 180px; }
+.aiscs-studio__pages .check-column { width: 40px; vertical-align: middle; }
+.aiscs-studio__pages .components-checkbox-control { margin: 0; }
+.aiscs-studio__thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 2px; vertical-align: middle; margin-right: 8px; }
+.aiscs-studio__pager, .aiscs-studio__actions, .aiscs-studio__save { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 16px 0; }
+.aiscs-studio__save .components-base-control { min-width: 280px; }
+.aiscs-studio__result { margin-top: 24px; }
+.aiscs-studio__analysis { background: #fff; border: 1px solid #dcdcde; border-radius: 4px; padding: 12px 16px; margin-bottom: 12px; }
+.aiscs-studio__analysis summary { cursor: pointer; font-weight: 600; }
+.aiscs-tokens h3 small { font-weight: 400; color: #646970; }
+.aiscs-tokens__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.aiscs-tokens__grid strong { display: block; text-transform: capitalize; margin-bottom: 4px; }
+.aiscs-tokens__palette { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.aiscs-tokens__table { max-width: 720px; }
+.aiscs-tokens__table th { width: 180px; }
+.aiscs-swatch { display: inline-flex; align-items: center; gap: 6px; }
+.aiscs-swatch--empty { color: #8c8f94; }
+.aiscs-swatch__chip { display: inline-block; width: 18px; height: 18px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, 0.2); vertical-align: middle; margin-right: 6px; }
+.aiscs-swatch__chip--lg { width: 24px; height: 24px; margin: 0; }
+.aiscs-swatch__label { color: #646970; }
+.aiscs-studio__split { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 24px; align-items: start; }
+.aiscs-studio__list ul { margin: 0; background: #fff; border: 1px solid #dcdcde; border-radius: 4px; }
+.aiscs-studio__list li { margin: 0; padding: 8px 12px; border-bottom: 1px solid #f0f0f1; }
+.aiscs-studio__list li:last-child { border-bottom: 0; }
+.aiscs-studio__list li.is-active { background: #f0f6fc; }
+.aiscs-studio__list li small { display: block; color: #646970; }
+.aiscs-studio__detail, .aiscs-studio__editor { min-width: 0; }
+.aiscs-studio__editor { background: #fff; border: 1px solid #dcdcde; border-radius: 4px; padding: 16px 20px; }
+.aiscs-studio__fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 16px; }
+.aiscs-color-field { display: flex; align-items: flex-end; gap: 8px; }
+.aiscs-color-field input[type="color"] { width: 36px; height: 32px; padding: 0; border: 1px solid #8c8f94; border-radius: 2px; background: none; }
+.aiscs-color-field .components-base-control { flex: 1; }
+.aiscs-studio__scale { max-width: 640px; }
+.aiscs-studio__scale td { padding: 4px 8px; }
+@media (max-width: 782px) {
+	.aiscs-studio__split { grid-template-columns: 1fr; }
+	.aiscs-studio__pages th:nth-child(3), .aiscs-studio__pages td:nth-child(3), .aiscs-studio__pages th:nth-child(6), .aiscs-studio__pages td:nth-child(6) { display: none; }
+}
