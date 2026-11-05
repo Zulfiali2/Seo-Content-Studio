@@ -336,7 +336,8 @@ class EngineTest extends TestCase {
 	}
 
 	public function testClonedModeAllowsSiteWidgetsButStillChecksStructure(): void {
-		$v      = new DocumentValidator( self::compat( true, array( 'heading', 'text-editor', 'button', 'image', 'html' ) ), static fn (): bool => false );
+		// The author's scripts are kept only for a user who may publish unfiltered HTML (1.9.0-rc.1).
+		$v      = new DocumentValidator( self::compat( true, array( 'heading', 'text-editor', 'button', 'image', 'html' ) ), static fn (): bool => false, static fn (): bool => true );
 		$report = $v->validate(
 			array(
 				array(
