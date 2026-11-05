@@ -298,14 +298,17 @@ final class VisionDesign {
 	}
 
 	/**
-	 * Leaf elements from the model's list.
+	 * Leaf elements from the model's list (shared with the AI page generator).
 	 *
-	 * @param array<int, mixed>    $list    Elements.
-	 * @param array<string, mixed> $report  Report.
-	 * @param bool                 $h1_used Whether an h1 was already placed.
+	 * @param array<int, mixed>    $list      Elements.
+	 * @param array<string, mixed> $report    Report.
+	 * @param bool                 $h1_used   Whether an h1 was already placed.
+	 * @param bool                 $generated Written content rather than transcribed text: text may hold
+	 *                                        several paragraphs (blank-line separated) and images keep
+	 *                                        their generation prompt.
 	 * @return list<array<string, mixed>>
 	 */
-	private static function leaves( array $list, array &$report, bool &$h1_used ): array {
+	public static function leaves( array $list, array &$report, bool &$h1_used, bool $generated = false ): array {
 		$out = array();
 		foreach ( array_slice( $list, 0, 30 ) as $e ) {
 			if ( ! is_array( $e ) || ! in_array( $e['type'] ?? '', self::LEAF_TYPES, true ) ) {
@@ -332,10 +335,13 @@ final class VisionDesign {
 					}
 					break;
 				case 'text':
-					if ( '' !== $text ) {
+					$paragraphs = $generated && is_string( $e['text'] ?? null )
+						? array_slice( array_filter( array_map( static fn ( string $p ): string => PageDocument::plain( $p, 2000 ), (array) preg_split( '/\n\s*\n/u', $e['text'] ) ) ), 0, 8 )
+						: array_filter( array( $text ) );
+					if ( array() !== $paragraphs ) {
 						$out[] = array(
 							'type'   => 'text',
-							'html'   => '<p>' . htmlspecialchars( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) . '</p>',
+							'html'   => implode( '', array_map( static fn ( string $p ): string => '<p>' . htmlspecialchars( $p, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) . '</p>', $paragraphs ) ),
 							'_words' => $words,
 						);
 					}
@@ -349,11 +355,15 @@ final class VisionDesign {
 					);
 					break;
 				case 'image':
-					$out[] = array(
+					$image = array(
 						'type'   => '_image',
 						'aspect' => in_array( $e['aspect'] ?? '', array( '3:2', '1:1', '2:3' ), true ) ? $e['aspect'] : '3:2',
 						'alt'    => mb_substr( $text, 0, 250 ),
 					);
+					if ( $generated ) {
+						$image['prompt'] = PageDocument::plain( $e['prompt'] ?? '', 1500 );
+					}
+					$out[] = $image;
 					break;
 				case 'icon':
 					$icon = strtolower( (string) preg_replace( '/^(fas|fa-solid|fa)\s+|fa-/', '', (string) ( $e['icon'] ?? '' ) ) );

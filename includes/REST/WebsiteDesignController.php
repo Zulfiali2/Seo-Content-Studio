@@ -11,6 +11,7 @@ use AiSeoContentStudio\Content\WritingProfile;
 use AiSeoContentStudio\Jobs\JobRunner;
 use AiSeoContentStudio\Projects\ProjectRepository;
 use AiSeoContentStudio\Providers\Contracts\ProviderException;
+use AiSeoContentStudio\Providers\ImageGenerationService;
 use AiSeoContentStudio\Settings\SettingsRepository;
 use AiSeoContentStudio\Support\Sanitize;
 use AiSeoContentStudio\WebsiteStudio\Analysis\PageCatalog;
@@ -20,6 +21,10 @@ use AiSeoContentStudio\WebsiteStudio\Engine\DocumentValidator;
 use AiSeoContentStudio\WebsiteStudio\Engine\DraftException;
 use AiSeoContentStudio\WebsiteStudio\Engine\DraftManager;
 use AiSeoContentStudio\WebsiteStudio\Engine\PageDocument;
+use AiSeoContentStudio\WebsiteStudio\Generator\GeneratedImages;
+use AiSeoContentStudio\WebsiteStudio\Generator\GeneratorJob;
+use AiSeoContentStudio\WebsiteStudio\Generator\PageGenerator;
+use AiSeoContentStudio\WebsiteStudio\Generator\SiteGateway;
 use AiSeoContentStudio\WebsiteStudio\Persistence\BrandProfileRepository;
 use AiSeoContentStudio\WebsiteStudio\StudioServices;
 use AiSeoContentStudio\WebsiteStudio\Vision\ScreenshotJob;
@@ -48,6 +53,9 @@ class WebsiteDesignController extends RestController {
 	 * @param JobRunner              $jobs     Jobs.
 	 * @param BrandProfileRepository $profiles Brand profiles.
 	 * @param SettingsRepository     $settings Settings.
+	 * @param ImageGenerationService $images   Image generation (provider check only; jobs generate).
+	 * @param GeneratedImages        $reviewed Image review of generated pages.
+	 * @param SiteGateway            $site     Link candidates.
 	 */
 	public function __construct(
 		private readonly StudioServices $studio,
@@ -55,6 +63,9 @@ class WebsiteDesignController extends RestController {
 		private readonly JobRunner $jobs,
 		private readonly BrandProfileRepository $profiles,
 		private readonly SettingsRepository $settings,
+		private readonly ImageGenerationService $images,
+		private readonly GeneratedImages $reviewed,
+		private readonly SiteGateway $site,
 	) {}
 
 	/**
@@ -307,6 +318,150 @@ class WebsiteDesignController extends RestController {
 				),
 			)
 		);
+		$brief_args = array(
+			'topic'              => $text( 300, true ),
+			'primary_keyword'    => $text( 120, true ),
+			'secondary_keywords' => array(
+				'type'     => 'array',
+				'items'    => array(
+					'type'      => 'string',
+					'maxLength' => 120,
+				),
+				'maxItems' => 15,
+				'default'  => array(),
+			),
+			'audience'           => $text( 300 ),
+			'intent'             => array(
+				'type'    => 'string',
+				'enum'    => array( '', 'informational', 'commercial', 'transactional', 'local' ),
+				'default' => '',
+			),
+			'location'           => $text( 120 ),
+			'tone'               => $text( 120 ),
+			'notes'              => $text( 3000 ),
+			'length'             => array(
+				'type'    => 'string',
+				'enum'    => array_keys( PageGenerator::LENGTHS ),
+				'default' => 'medium',
+			),
+			'sections'           => array(
+				'type'     => 'array',
+				'items'    => array(
+					'type' => 'string',
+					'enum' => PageDocument::SECTION_TYPES,
+				),
+				'maxItems' => 12,
+				'default'  => array(),
+			),
+			'images'             => array(
+				'type'    => 'integer',
+				'minimum' => 0,
+				'maximum' => PageGenerator::MAX_IMAGES,
+				'default' => 3,
+			),
+			'cta_url'            => $text( 500 ),
+			'links'              => array(
+				'type'    => 'boolean',
+				'default' => true,
+			),
+			'title'              => $text( 200 ),
+			'profile_id'         => array(
+				'type'    => 'integer',
+				'minimum' => 0,
+				'default' => 0,
+			),
+		);
+		register_rest_route(
+			self::NAMESPACE,
+			'/design/generate',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'generatePage' ),
+				'permission_callback' => array( $this, 'canGenerate' ),
+				'args'                => $brief_args,
+			)
+		);
+		register_rest_route(
+			self::NAMESPACE,
+			'/design/generate/(?P<id>\d+)/build',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'buildGenerated' ),
+				'permission_callback' => array( $this, 'canAccessStudioProject' ),
+				'args'                => $id + array(
+					'approved_links' => array(
+						'type'     => 'array',
+						'items'    => array(
+							'type'    => 'string',
+							'pattern' => '^link-\d{1,2}$',
+						),
+						'maxItems' => 20,
+						'default'  => array(),
+					),
+					'title'          => $text( 200 ),
+				),
+			)
+		);
+		register_rest_route(
+			self::NAMESPACE,
+			'/design/generate/(?P<id>\d+)/images',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'generateImages' ),
+				'permission_callback' => array( $this, 'canAccessStudioProject' ),
+				'args'                => $id + array(
+					'slots'   => array(
+						'type'     => 'array',
+						'items'    => array(
+							'type'    => 'string',
+							'pattern' => '^img-\d{1,2}$',
+						),
+						'minItems' => 1,
+						'maxItems' => PageGenerator::MAX_IMAGES,
+						'required' => true,
+					),
+					'prompts' => array(
+						'type'                 => 'object',
+						'default'              => array(),
+						'additionalProperties' => array(
+							'type'      => 'string',
+							'maxLength' => 1500,
+						),
+					),
+				),
+			)
+		);
+		register_rest_route(
+			self::NAMESPACE,
+			'/design/generate/(?P<id>\d+)/images/apply',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'applyImages' ),
+				'permission_callback' => array( $this, 'canAccessStudioProject' ),
+				'args'                => $id + array(
+					'slots' => array(
+						'type'     => 'array',
+						'items'    => array(
+							'type'    => 'string',
+							'pattern' => '^img-\d{1,2}$',
+						),
+						'minItems' => 1,
+						'maxItems' => PageGenerator::MAX_IMAGES,
+						'required' => true,
+					),
+				),
+			)
+		);
+		register_rest_route(
+			self::NAMESPACE,
+			'/design/generate/(?P<id>\d+)/images/(?P<slot>img-\d{1,2})/discard',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'discardImage' ),
+				'permission_callback' => array( $this, 'canAccessStudioProject' ),
+				'args'                => $id,
+			)
+		);
 		register_rest_route(
 			self::NAMESPACE,
 			'/design/pages',
@@ -468,10 +623,21 @@ class WebsiteDesignController extends RestController {
 				'source'     => (string) ( $studio['source'] ?? 'clone' ),
 				'design'     => isset( $studio['design'] ) ? array(
 					'document' => self::designView( (array) $studio['design']['document'] ),
-					'tokens'   => $studio['design']['tokens'],
+					'tokens'   => $studio['design']['tokens'] ?? null,
 					'report'   => $studio['design']['report'],
 					'provider' => $studio['design']['provider'] ?? '',
 					'model'    => $studio['design']['model'] ?? '',
+				) : null,
+				'generator'  => 'generator' === ( $studio['source'] ?? '' ) && isset( $studio['design'] ) ? array(
+					'seo'    => $studio['design']['seo'],
+					'links'  => $studio['design']['links'],
+					'facts'  => $studio['design']['facts'],
+					'images' => $studio['design']['images'],
+					'report' => $studio['design']['report'],
+				) : null,
+				'images'     => 'generator' === ( $studio['source'] ?? '' ) ? array(
+					'slots'        => array_values( (array) ( $studio['images'] ?? array() ) ),
+					'can_generate' => null !== $this->images->provider() && current_user_can( 'upload_files' ),
 				) : null,
 				'job'        => $this->jobs->publicView( $this->projects->section( $id, 'job' ) ),
 				'result'     => $studio['result'] ?? null,
@@ -727,6 +893,206 @@ class WebsiteDesignController extends RestController {
 	}
 
 	/**
+	 * Brief fields of a request.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return array<string, mixed>
+	 */
+	private static function brief( \WP_REST_Request $request ): array {
+		return array(
+			'topic'              => Sanitize::text( $request->get_param( 'topic' ), 300 ),
+			'primary_keyword'    => Sanitize::text( $request->get_param( 'primary_keyword' ), 120 ),
+			'secondary_keywords' => Sanitize::strings( $request->get_param( 'secondary_keywords' ), 15, 120 ),
+			'audience'           => Sanitize::text( $request->get_param( 'audience' ), 300 ),
+			'intent'             => Sanitize::text( $request->get_param( 'intent' ), 20 ),
+			'location'           => Sanitize::text( $request->get_param( 'location' ), 120 ),
+			'tone'               => Sanitize::text( $request->get_param( 'tone' ), 120 ),
+			'notes'              => Sanitize::textarea( $request->get_param( 'notes' ), 3000 ),
+		);
+	}
+
+	/**
+	 * POST /design/generate: write a new page from a brief (design for review; nothing is saved to pages).
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 */
+	public function generatePage( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$user    = get_current_user_id();
+		$profile = (int) $request->get_param( 'profile_id' );
+		if ( $profile > 0 && ! $this->profiles->canAccess( $profile, $user ) ) {
+			return $this->forbidden();
+		}
+		$blocker = $this->studio->compat()->blocker();
+		if ( '' !== $blocker ) {
+			return new \WP_Error( 'aiscs_' . $blocker, DraftManager::blockerMessage( $blocker ), array( 'status' => 424 ) );
+		}
+		$brief = self::brief( $request ) + array(
+			'length'   => (string) $request->get_param( 'length' ),
+			'sections' => array_values( array_intersect( (array) $request->get_param( 'sections' ), PageDocument::SECTION_TYPES ) ),
+			'images'   => max( 0, min( PageGenerator::MAX_IMAGES, (int) $request->get_param( 'images' ) ) ),
+			'cta_url'  => PageGenerator::ctaUrl( (string) $request->get_param( 'cta_url' ) ),
+		);
+		if ( '' === $brief['topic'] || '' === $brief['primary_keyword'] ) {
+			return new \WP_Error( 'aiscs_brief_incomplete', __( 'Enter the page topic and the primary keyword.', 'ai-seo-content-studio' ), array( 'status' => 400 ) );
+		}
+		if ( '' !== trim( (string) $request->get_param( 'cta_url' ) ) && '' === $brief['cta_url'] ) {
+			return new \WP_Error( 'aiscs_invalid_cta_url', __( 'The button link must be an http(s) URL, a path on this site (/contact/) or an anchor (#contact).', 'ai-seo-content-studio' ), array( 'status' => 400 ) );
+		}
+		$project = $this->projects->create(
+			array(
+				'keyword'      => $brief['primary_keyword'],
+				'content_type' => 'studio_generate',
+			),
+			$user
+		);
+		if ( $project <= 0 ) {
+			return new \WP_Error( 'aiscs_project_not_created', __( 'The job could not be created.', 'ai-seo-content-studio' ), array( 'status' => 500 ) );
+		}
+		update_post_meta( $project, ProjectRepository::KIND_META, self::KIND );
+		$this->projects->save(
+			$project,
+			'studio',
+			array(
+				'source'     => 'generator',
+				'brief'      => $brief,
+				'options'    => array(
+					'profile_id' => $profile,
+					'title'      => Sanitize::text( $request->get_param( 'title' ), 200 ),
+				),
+				// Read now, as the requesting user: only published public pages are offered.
+				'candidates' => $request->get_param( 'links' ) ? $this->site->linkCandidates() : array(),
+			)
+		);
+		try {
+			$job = $this->jobs->start( $project, GeneratorJob::TYPE_WRITE, $user );
+		} catch ( ProviderException $e ) {
+			return new \WP_Error( 'aiscs_job_not_started', $e->getMessage(), array( 'status' => 409 ) );
+		}
+		return new \WP_REST_Response(
+			array(
+				'project_id' => $project,
+				'job'        => $this->jobs->publicView( $job ),
+			),
+			202
+		);
+	}
+
+	/**
+	 * POST /design/generate/{id}/build: create the draft with the approved links.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 */
+	public function buildGenerated( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$id     = (int) $request->get_param( 'id' );
+		$studio = (array) $this->projects->section( $id, 'studio' );
+		if ( 'generator' !== ( $studio['source'] ?? '' ) || empty( $studio['design']['document']['sections'] ) ) {
+			return new \WP_Error( 'aiscs_not_generated', __( 'Generate the page design first.', 'ai-seo-content-studio' ), array( 'status' => 409 ) );
+		}
+		if ( isset( $studio['result']['page_id'] ) ) {
+			return new \WP_Error( 'aiscs_already_built', __( 'A draft was already created from this design.', 'ai-seo-content-studio' ), array( 'status' => 409 ) );
+		}
+		$known                    = array_column( (array) $studio['design']['links'], 'id' );
+		$studio['approved_links'] = array_values( array_intersect( Sanitize::strings( $request->get_param( 'approved_links' ), 20, 10 ), $known ) );
+		$title                    = Sanitize::text( $request->get_param( 'title' ), 200 );
+		if ( '' !== $title ) {
+			$studio['options']['title'] = $title;
+		}
+		unset( $studio['image_ids'] );
+		$this->projects->save( $id, 'studio', $studio );
+		try {
+			$job = $this->jobs->start( $id, GeneratorJob::TYPE_BUILD, get_current_user_id() );
+		} catch ( ProviderException $e ) {
+			return new \WP_Error( 'aiscs_job_not_started', $e->getMessage(), array( 'status' => 409 ) );
+		}
+		return new \WP_REST_Response(
+			array(
+				'project_id' => $id,
+				'job'        => $this->jobs->publicView( $job ),
+			),
+			202
+		);
+	}
+
+	/**
+	 * POST /design/generate/{id}/images: generate AI image candidates (not yet in the page).
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 */
+	public function generateImages( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$id     = (int) $request->get_param( 'id' );
+		$studio = (array) $this->projects->section( $id, 'studio' );
+		if ( ! current_user_can( 'upload_files' ) ) {
+			return $this->forbidden();
+		}
+		if ( null === $this->images->provider() ) {
+			return new \WP_Error( 'aiscs_no_image_provider', __( 'Choose a default image provider under AI Providers.', 'ai-seo-content-studio' ), array( 'status' => 424 ) );
+		}
+		if ( empty( $studio['images'] ) ) {
+			return new \WP_Error( 'aiscs_no_image_slots', __( 'This draft has no image slots.', 'ai-seo-content-studio' ), array( 'status' => 409 ) );
+		}
+		$wanted  = Sanitize::strings( $request->get_param( 'slots' ), PageGenerator::MAX_IMAGES, 10 );
+		$prompts = (array) $request->get_param( 'prompts' );
+		$slots   = array();
+		foreach ( $studio['images'] as $i => $slot ) {
+			if ( ! in_array( $slot['id'], $wanted, true ) ) {
+				continue;
+			}
+			$prompt = Sanitize::textarea( $prompts[ $slot['id'] ] ?? '', 1500 );
+			if ( '' !== $prompt ) {
+				$studio['images'][ $i ]['prompt'] = $prompt;
+			}
+			$studio['images'][ $i ]['error'] = '';
+			$slots[]                         = $slot['id'];
+		}
+		if ( array() === $slots ) {
+			return new \WP_Error( 'aiscs_no_image_slots', __( 'Choose at least one image.', 'ai-seo-content-studio' ), array( 'status' => 400 ) );
+		}
+		$this->projects->save( $id, 'studio', $studio );
+		try {
+			$job = $this->jobs->start(
+				$id,
+				GeneratorJob::TYPE_IMAGES,
+				get_current_user_id(),
+				array(
+					'slots' => $slots,
+					'run'   => wp_generate_password( 12, false ),
+				)
+			);
+		} catch ( ProviderException $e ) {
+			return new \WP_Error( 'aiscs_job_not_started', $e->getMessage(), array( 'status' => 409 ) );
+		}
+		return new \WP_REST_Response(
+			array(
+				'project_id' => $id,
+				'job'        => $this->jobs->publicView( $job ),
+			),
+			202
+		);
+	}
+
+	/**
+	 * POST /design/generate/{id}/images/apply: put approved candidates into the draft.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 */
+	public function applyImages( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		try {
+			return new \WP_REST_Response( $this->reviewed->apply( (int) $request->get_param( 'id' ), Sanitize::strings( $request->get_param( 'slots' ), PageGenerator::MAX_IMAGES, 10 ), get_current_user_id() ) );
+		} catch ( DraftException $e ) {
+			return self::draftError( $e );
+		}
+	}
+
+	/**
+	 * POST /design/generate/{id}/images/{slot}/discard: delete a rejected candidate.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 */
+	public function discardImage( \WP_REST_Request $request ): \WP_REST_Response {
+		return new \WP_REST_Response( array( 'images' => $this->reviewed->discard( (int) $request->get_param( 'id' ), (string) $request->get_param( 'slot' ) ) ) );
+	}
+
+	/**
 	 * Design document for review: image slots shown as placeholders, internal keys removed.
 	 *
 	 * @param array<string, mixed> $doc Document.
@@ -742,6 +1108,7 @@ class WebsiteDesignController extends RestController {
 						'type'   => 'image',
 						'aspect' => $e['aspect'],
 						'alt'    => $e['alt'],
+						'prompt' => (string) ( $e['prompt'] ?? '' ),
 					);
 				}
 				if ( 'group' === ( $e['type'] ?? '' ) ) {

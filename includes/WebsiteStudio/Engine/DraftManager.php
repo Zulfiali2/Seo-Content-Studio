@@ -10,6 +10,7 @@ namespace AiSeoContentStudio\WebsiteStudio\Engine;
 use AiSeoContentStudio\Elementor\ElementorBridgeInterface;
 use AiSeoContentStudio\WebsiteStudio\Persistence\AuditLog;
 use AiSeoContentStudio\WebsiteStudio\Persistence\GeneratedPageRepository;
+use AiSeoContentStudio\WebsiteStudio\Persistence\RevisionRepository;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -24,6 +25,9 @@ defined( 'ABSPATH' ) || exit;
  * - Every document passes DocumentValidator before saving; nothing invalid is written.
  * - Saving goes through Elementor's Document::save() (via ElementorBridge), never by writing
  *   _elementor_data directly. If Elementor rejects the document, the new draft is deleted.
+ * - Every write stores a revision snapshot (RevisionRepository). Before a change, edits made
+ *   in Elementor since the last studio change are captured as their own revision, so they can
+ *   always be restored.
  */
 class DraftManager {
 
@@ -48,7 +52,19 @@ class DraftManager {
 		private readonly GeneratedPageRepository $records,
 		private readonly AuditLog $audit,
 		private readonly PostGateway $posts = new PostGateway(),
+		private readonly ?RevisionRepository $revisions = null,
 	) {}
+
+	/**
+	 * Validate an element tree without saving it.
+	 *
+	 * @param array<int, mixed> $elements Elements.
+	 * @param string            $mode     Validation mode.
+	 * @return array{errors: string[], warnings: string[], stats: array<string, int>}
+	 */
+	public function validate( array $elements, string $mode = DocumentValidator::MODE_GENERATED ): array {
+		return $this->validator->validate( $elements, self::modeFor( $mode ) );
+	}
 
 	/**
 	 * Create a new draft page from an Elementor element tree.
@@ -118,7 +134,22 @@ class DraftManager {
 		}
 
 		$warnings = $report['warnings'];
-		if ( count( $this->bridge->elements( $page_id ) ) !== count( $elements ) ) {
+		$stored   = $this->bridge->elements( $page_id );
+		$this->revisions?->add(
+			array(
+				'page_id'     => $page_id,
+				'project_id'  => (int) ( $args['project_id'] ?? 0 ),
+				'action'      => 'create',
+				'summary'     => __( 'Draft created', 'ai-seo-content-studio' ),
+				'meta'        => array( 'type' => (string) ( $args['generation_type'] ?? 'generated' ) ),
+				'created_by'  => $user,
+				'elements'    => $stored,
+				'settings'    => $page_settings,
+				'document'    => (array) ( $args['document'] ?? array() ),
+				'section_map' => (array) ( $args['section_map'] ?? array() ),
+			)
+		);
+		if ( count( $stored ) !== count( $elements ) ) {
 			$warnings[] = __( 'Elementor stored a different number of sections than were generated. Open the page in Elementor and check it.', 'ai-seo-content-studio' );
 		}
 		$this->audit->record(
@@ -141,20 +172,76 @@ class DraftManager {
 	 * @param array<int, mixed> $elements Elements.
 	 * @param int               $user_id  User.
 	 * @param string            $mode     Validation mode.
-	 * @return array{page_id: int, edit_url: string, elementor_url: string, preview_url: string, warnings: string[], stats: array<string, int>}
+	 * @param array<string, mixed> $change Revision details: action, summary, section_id, meta; and, when the
+	 *                                     design document changed with it, document and section_map.
+	 * @return array{page_id: int, edit_url: string, elementor_url: string, preview_url: string, warnings: string[], stats: array<string, int>, revision: int}
 	 * @throws DraftException When the page may not be written or the document is invalid.
 	 */
-	public function update( int $page_id, array $elements, int $user_id, string $mode = DocumentValidator::MODE_GENERATED ): array {
+	public function update( int $page_id, array $elements, int $user_id, string $mode = DocumentValidator::MODE_GENERATED, array $change = array() ): array {
 		$this->assertWritable( $page_id, $user_id );
 		$report = $this->validator->validate( $elements, self::modeFor( $mode ) );
 		if ( array() !== $report['errors'] ) {
 			throw new DraftException( 'invalid_document', $report['errors'], $report['warnings'] );
 		}
+		$record = (array) $this->records->forPage( $page_id );
+		$this->captureOutsideEdits( $page_id, $record, $user_id );
 		if ( ! $this->bridge->save( $page_id, array_values( $elements ), array() ) ) {
 			throw new DraftException( 'elementor_rejected', array( __( 'Elementor did not accept the change. The page was not changed.', 'ai-seo-content-studio' ) ) );
 		}
-		$this->audit->record( 'design.draft_update', 'page', $page_id, array(), $user_id );
-		return $this->result( $page_id, $report['warnings'], $report['stats'] );
+		$document    = (array) ( $record['document'] ?? array() );
+		$section_map = (array) ( $record['section_map'] ?? array() );
+		if ( isset( $change['document'] ) || isset( $change['section_map'] ) ) {
+			$document    = (array) ( $change['document'] ?? $document );
+			$section_map = (array) ( $change['section_map'] ?? $section_map );
+			$this->records->updateDocument( $page_id, $section_map, $document );
+		}
+		$revision = (int) $this->revisions?->add(
+			array(
+				'page_id'     => $page_id,
+				'project_id'  => (int) ( $record['project_id'] ?? 0 ),
+				'action'      => (string) ( $change['action'] ?? 'update' ),
+				'summary'     => (string) ( $change['summary'] ?? __( 'Page updated', 'ai-seo-content-studio' ) ),
+				'section_id'  => (string) ( $change['section_id'] ?? '' ),
+				'meta'        => (array) ( $change['meta'] ?? array() ),
+				'created_by'  => $user_id,
+				'elements'    => $this->bridge->elements( $page_id ),
+				'document'    => $document,
+				'section_map' => $section_map,
+			)
+		);
+		$this->audit->record( 'design.draft_update', 'page', $page_id, array( 'action' => (string) ( $change['action'] ?? 'update' ) ), $user_id );
+		return $this->result( $page_id, $report['warnings'], $report['stats'] ) + array( 'revision' => $revision );
+	}
+
+	/**
+	 * Store the page as it is now when it differs from the last revision (edited in Elementor),
+	 * or when it has no history yet (made before revisions existed).
+	 *
+	 * @param int                  $page_id Page.
+	 * @param array<string, mixed> $record  Generated page record.
+	 * @param int                  $user_id User.
+	 */
+	private function captureOutsideEdits( int $page_id, array $record, int $user_id ): void {
+		if ( null === $this->revisions ) {
+			return;
+		}
+		$current = $this->bridge->elements( $page_id );
+		$latest  = $this->revisions->latest( $page_id );
+		if ( null !== $latest && $latest['hash'] === RevisionRepository::hash( $current ) ) {
+			return;
+		}
+		$this->revisions->add(
+			array(
+				'page_id'     => $page_id,
+				'project_id'  => (int) ( $record['project_id'] ?? 0 ),
+				'action'      => 'external',
+				'summary'     => null === $latest ? __( 'Page before its first tracked change', 'ai-seo-content-studio' ) : __( 'Edited in Elementor', 'ai-seo-content-studio' ),
+				'created_by'  => $user_id,
+				'elements'    => $current,
+				'document'    => (array) ( $record['document'] ?? array() ),
+				'section_map' => (array) ( $record['section_map'] ?? array() ),
+			)
+		);
 	}
 
 	/**

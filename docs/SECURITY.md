@@ -177,3 +177,42 @@ Report vulnerabilities privately to the plugin maintainer, not in public issues.
 
   Missing content becomes visible placeholders, never invented facts. Pages pass the DocumentValidator in `generated` mode, so no HTML widget is possible.
 - **Costs.** One vision request per screenshot, plus one optional text request for the content. Both go through TextGenerationService (limits, usage log, duplicate-request lock). Retried steps never repeat a request.
+
+## AI Website Studio — page generator, links and images (1.9.0-beta.3)
+
+- **Untrusted model output.** The answer is strict JSON. Every value passes VisionDesign/PageGenerator and then the PageDocument and HtmlFragment sanitisers before the review:
+  - text is plain (paragraphs are escaped and wrapped in `<p>`);
+  - icons come from the allow-list;
+  - colours cannot be given at all (background roles only);
+  - at most 20 sections.
+
+  The document is validated before the user sees it, and again (DocumentValidator, `generated` mode) before the draft is saved.
+- **Links.**
+  - Button URLs come only from the user's `cta_url` (http(s), a site path or `#anchor`; `javascript:`, protocol-relative and other schemes are refused). Otherwise buttons link to `#`.
+  - Internal link targets come only from the server's candidate list (published, public, password-free pages and posts). The model sees IDs and titles, and URLs are filled in by the server.
+  - The anchor is HTML-escaped and wrapped outside existing links. The target's permalink is read again when the draft is built.
+- **No invented facts.** The prompt forbids prices, statistics, awards, testimonials, contact details and the like unless the user's notes or business settings provide them. Missing facts become visible `[placeholders]`. The review lists every sentence with a number, every placeholder and the model's assumptions.
+- **Images.**
+  - Image requests need `upload_files` and a configured image provider, and go through ImageGenerationService (limits, usage log, duplicate lock) and ImageValidator.
+  - Generated images are suggestions until the user approves them.
+  - Placeholders and approved images are attached to the draft, so `MediaImporter::deleteUnused()` never removes an image a page shows.
+  - Only plugin-made images are ever deleted (rejected suggestions, replaced placeholders), and only when the user may delete them.
+- **Ownership.** Every generator route requires `aiscs_generate_content` and ownership of the studio project. Applying images also passes `DraftManager::assertWritable()` (a studio-made draft the user can edit). Nothing is published.
+
+## AI Website Studio — page tools, revisions and library (1.9.0-beta.4)
+
+- **No writes to original pages.** Every write (fixes, regeneration, restore, library insert) goes through `DraftManager::update()`. That requires a studio-made page that is still a draft, pending or private and that the user can edit, validates the whole tree, and stores a revision. Reading (checks, preview links, history, saving to the library) needs `edit_post` on the page.
+- **Fixes cannot carry arbitrary settings.** The client sends only finding ids. The server recomputes the findings from the current page and applies the operations it generated itself. User text (alt text, button labels) is sanitised and HTML-escaped. Alt text is written only to attachments the user may edit.
+- **Proposals are isolated.**
+  - A regeneration result lives in a studio project owned by the user, and is validated in `generated` mode, so only free native widgets are allowed and there is no HTML widget.
+  - It is previewed on a separate temporary draft that is never published, is hidden from page lists, carries an expiry, and is deleted on approve, on discard, or after 24 hours.
+  - Approving re-checks that the section is still where the proposal expects it.
+- **Previews** use WordPress's nonce-protected draft preview links: only logged-in users who may edit the page can open them, and nothing is exposed publicly.
+- **AI section requests** send only that section's text, the page's section types, the brief and the business facts, under the same rules as the generator. Facts are never invented, and images are never invented (only existing images are reused). The answer is strict JSON and passes the PageDocument sanitisers.
+- **Revisions** are stored in the plugin's own table: compressed, limited per page and in size, deleted with the page, and pruned for deleted pages. Restores are themselves revisions.
+- **Design library** items are owned by their creator (managers see all). Saving validates the element in `cloned` mode and limits it to 1 MB. Inserting copies it with new ids, never shares ids with the target page, and is validated again.
+
+## AI Website Studio — phase 8 review (1.9.0-rc.1)
+
+- **Copied content and `unfiltered_html`.** `cloned` validation keeps an author's own page scripts only for users WordPress already trusts with unfiltered HTML. For everyone else, script and event-handler markup is refused, so the library, restores and fixes cannot be used for privilege escalation. Script URLs are refused in every mode.
+- A regression suite (`tests/unit/SecurityTest.php`) covers XSS payloads through every sanitiser, model-output injection, SQL inputs, tampered revision snapshots, fix ids that the server did not issue, and preview-page abuse. See `docs/website-studio/QA-REPORT.md` for the full review.

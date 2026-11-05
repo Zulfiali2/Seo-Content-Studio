@@ -80,6 +80,26 @@ class PostGateway {
 	}
 
 	/**
+	 * A meta value ("" when unset).
+	 *
+	 * @param int    $id  Post.
+	 * @param string $key Key.
+	 */
+	public function meta( int $id, string $key ): mixed {
+		return get_post_meta( $id, $key, true );
+	}
+
+	/**
+	 * Post title ("" when missing).
+	 *
+	 * @param int $id Post.
+	 */
+	public function title( int $id ): string {
+		$post = get_post( $id );
+		return $post ? html_entity_decode( (string) get_the_title( $post ), ENT_QUOTES, 'UTF-8' ) : '';
+	}
+
+	/**
 	 * Whether a user can edit a post / create pages.
 	 *
 	 * @param int    $user_id User.

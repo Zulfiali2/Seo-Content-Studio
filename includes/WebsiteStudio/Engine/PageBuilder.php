@@ -8,6 +8,7 @@
 namespace AiSeoContentStudio\WebsiteStudio\Engine;
 
 use AiSeoContentStudio\Elementor\ElementorBridgeInterface;
+use AiSeoContentStudio\WebsiteStudio\Design\DesignTokens;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -40,7 +41,7 @@ class PageBuilder {
 	 * @return array{elements: list<array<string, mixed>>, section_map: array<string, string>, notes: string[], settings: array<string, mixed>}
 	 */
 	public function map( array $doc, array $tokens ): array {
-		$mapper = new ElementorMapper( $this->compat, new IdGenerator(), $tokens, $this->kitColors() );
+		$mapper = $this->mapper( $tokens );
 		$result = $mapper->map( $doc );
 		// The hero carries the page's H1, so the theme's title is hidden where the theme allows it.
 		$has_h1             = (bool) preg_match( '/"header_size":"h1"/', (string) wp_json_encode( $result['elements'] ) );
@@ -77,7 +78,8 @@ class PageBuilder {
 					'slug'        => $doc['page']['slug'],
 					'mode'        => $mode,
 					'section_map' => $mapped['section_map'],
-					'document'    => $doc,
+					// The tokens are kept with the document, so a regenerated section is styled like the rest.
+					'document'    => $doc + array( '_tokens' => DesignTokens::normalize( $tokens ) ),
 					'notes'       => $mapped['notes'],
 					'template'    => (string) ( $args['template'] ?? 'elementor_header_footer' ),
 				)
@@ -87,6 +89,22 @@ class PageBuilder {
 			'notes'       => $mapped['notes'],
 			'section_map' => $mapped['section_map'],
 		);
+	}
+
+	/**
+	 * A mapper for the installed Elementor and the active kit (section regeneration, library).
+	 *
+	 * @param array<string, mixed> $tokens Brand tokens.
+	 */
+	public function mapper( array $tokens ): ElementorMapper {
+		return new ElementorMapper( $this->compat, new IdGenerator(), $tokens, $this->kitColors() );
+	}
+
+	/**
+	 * Installed Elementor.
+	 */
+	public function compat(): ElementorCompat {
+		return $this->compat;
 	}
 
 	/**

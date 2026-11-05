@@ -20,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
 final class Migrations {
 
 	/** Current schema version. Bump when the schema changes. */
-	public const DB_VERSION = '7';
+	public const DB_VERSION = '8';
 
 	/** Option storing the installed schema version. */
 	public const OPTION = 'aiscs_db_version';
