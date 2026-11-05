@@ -10,7 +10,7 @@ namespace AiSeoContentStudio\WebsiteStudio\Engine;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Checks a complete Elementor document. Two modes:
+ * Checks a complete Elementor document. Modes:
  *
  * - MODE_GENERATED (mapper output): only the widgets ElementorCompat::FREE_WIDGETS, strict
  *   settings checks, no executable content anywhere.
@@ -20,6 +20,9 @@ defined( 'ABSPATH' ) || exit;
  *
  * - MODE_CONVERTED (HTML conversion): as generated, plus the HTML widget for the fallback
  *   elements the user chose to keep; its content must still carry no executable markup.
+ * - MODE_IMPORTED (website project ZIP): as converted, but the HTML may keep sanitised inline
+ *   SVG and YouTube, Vimeo or Google Maps iframes. Scripts, event handlers, styles, objects,
+ *   embeds, other frames and script URLs are still refused.
  *
  * Errors block saving; warnings are reported to the user.
  */
@@ -28,6 +31,7 @@ final class DocumentValidator {
 	public const MODE_GENERATED = 'generated';
 	public const MODE_CLONED    = 'cloned';
 	public const MODE_CONVERTED = 'converted';
+	public const MODE_IMPORTED  = 'imported';
 
 	public const MAX_ELEMENTS = 3000;
 	public const MAX_DEPTH    = 30;
@@ -158,7 +162,7 @@ final class DocumentValidator {
 		$type   = is_string( $node['elType'] ?? null ) ? $node['elType'] : '';
 		$atomic = str_starts_with( $type, 'e-' );
 		$cloned    = self::MODE_CLONED === $state['mode'];
-		$converted = self::MODE_CONVERTED === $state['mode'];
+		$converted = in_array( $state['mode'], array( self::MODE_CONVERTED, self::MODE_IMPORTED ), true );
 
 		if ( $atomic ) {
 			if ( ! $cloned ) {
@@ -261,7 +265,8 @@ final class DocumentValidator {
 	 */
 	private function walkValues( mixed $value, string $path, array &$state, bool $lenient ): void {
 		if ( ! is_array( $value ) ) {
-			if ( is_string( $value ) && self::executable( $value ) ) {
+			$unsafe = self::MODE_IMPORTED === $state['mode'] ? self::executableImported( (string) ( is_string( $value ) ? $value : '' ) ) : is_string( $value ) && self::executable( $value );
+			if ( $unsafe ) {
 				// Copied content may keep the site's own scripts, but only for users WordPress already
 				// trusts with unfiltered HTML; for everyone else that would be a privilege escalation.
 				if ( ! $lenient || ! ( $this->unfilteredHtml )() ) {
@@ -363,6 +368,30 @@ final class DocumentValidator {
 
 	/**
 	 * Whether a string carries executable markup or a script URL.
+	 *
+	 * @param string $s String.
+	 */
+	public static function executableImported( string $s ): bool {
+		if ( '' === $s ) {
+			return false;
+		}
+		$decoded = html_entity_decode( $s, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		if ( preg_match( '/<\s*(script|object|embed|style|link|meta|base|frame|frameset|applet|portal)\b|\son[a-z]+\s*=|\s(srcdoc|formaction)\s*=|javascript\s*:|vbscript\s*:|data\s*:\s*text\/html/i', $decoded ) ) {
+			return true;
+		}
+		// Imported pages may keep sanitised inline SVG and video/map embeds, nothing else that frames content.
+		if ( preg_match_all( '/<\s*iframe\b[^>]*>/i', $decoded, $frames ) ) {
+			foreach ( $frames[0] as $frame ) {
+				if ( ! preg_match( '#\ssrc\s*=\s*["\']?https://(www\.)?(youtube\.com/embed/|youtube-nocookie\.com/embed/|player\.vimeo\.com/video/|google\.com/maps/embed|maps\.google\.com/maps)#i', $frame ) ) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether a string can run code or embed other documents (all generated modes).
 	 *
 	 * @param string $s String.
 	 */

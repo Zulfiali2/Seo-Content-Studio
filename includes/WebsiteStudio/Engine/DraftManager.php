@@ -293,7 +293,7 @@ class DraftManager {
 	 * @param string $mode Mode.
 	 */
 	private static function modeFor( string $mode ): string {
-		return in_array( $mode, array( DocumentValidator::MODE_CLONED, DocumentValidator::MODE_CONVERTED ), true ) ? $mode : DocumentValidator::MODE_GENERATED;
+		return in_array( $mode, array( DocumentValidator::MODE_CLONED, DocumentValidator::MODE_CONVERTED, DocumentValidator::MODE_IMPORTED ), true ) ? $mode : DocumentValidator::MODE_GENERATED;
 	}
 
 	/**

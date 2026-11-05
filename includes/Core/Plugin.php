@@ -44,6 +44,9 @@ use AiSeoContentStudio\REST\WebsiteDesignController;
 use AiSeoContentStudio\REST\PageToolsController;
 use AiSeoContentStudio\REST\DesignLibraryController;
 use AiSeoContentStudio\REST\WebsiteStudioController;
+use AiSeoContentStudio\REST\ProjectImportController;
+use AiSeoContentStudio\WebsiteStudio\Import\ImportedPage;
+use AiSeoContentStudio\WebsiteStudio\Import\ImportService;
 use AiSeoContentStudio\Research\CompetitorFetcher;
 use AiSeoContentStudio\Research\CostEstimates;
 use AiSeoContentStudio\Research\DataForSEO\DataForSeoProvider;
@@ -352,6 +355,8 @@ final class Plugin {
 
 		// Blog template shortcodes render on the front end and in the Elementor editor (admin AJAX).
 		( new BlogShortcodes() )->register();
+		// Imported website projects: page-scoped CSS everywhere the page renders, approved scripts on the front end.
+		( new ImportedPage() )->register();
 
 		if ( is_admin() ) {
 			( new AdminPage( $this->environment, $this->settings ) )->register();
@@ -444,6 +449,7 @@ final class Plugin {
 		( new WebsiteDesignController( $this->studio, $this->projects, $this->jobs, new BrandProfileRepository(), $this->settings, $this->images, new GeneratedImages( $this->projects, $this->studio, $site, $this->media ), $site ) )->register();
 		( new PageToolsController( $this->studio, $this->projects, $this->jobs, new BrandProfileRepository(), new WebsiteAnalyzer( $design_source, $analyses ), new PageChecks( $this->studio ), $this->proposals(), new RevisionService( $this->studio ), $this->images ) )->register();
 		( new DesignLibraryController( new LibraryRepository(), new DesignLibrary( new LibraryRepository(), $this->studio, $this->previews() ), new BrandProfileRepository() ) )->register();
+		( new ProjectImportController( $this->studio, new ImportService( $this->studio ) ) )->register();
 	}
 
 	/**
