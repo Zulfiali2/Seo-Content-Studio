@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <style>.c{fill:none;stroke:#2BA3F0;stroke-width:2.5}</style>
+  <script>alert('svg file script')</script>
+  <circle cx="12" cy="12" r="10" fill="#E8F4FD" onload="alert(1)"/>
+  <path class="c" d="M7 12.5l3 3 7-7"/>
+</svg>

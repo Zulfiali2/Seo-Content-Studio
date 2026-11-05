@@ -1,0 +1,13 @@
+@media (max-width: 1024px) {
+	.pa-hero__grid, .pa-terms__grid { grid-template-columns: 1fr; }
+	.pa-cards { grid-template-columns: repeat(2, 1fr); }
+	.pa-toc { position: static; }
+}
+@media (max-width: 767px) {
+	.pa-topbar__inner { flex-direction: column; gap: 4px; text-align: center; }
+	.pa-burger { display: inline-block; background: none; border: 1px solid rgba(255,255,255,.4); color: #fff; border-radius: 8px; padding: 8px 12px; }
+	.pa-nav { display: none; }
+	.pa-nav.is-open { display: block; position: absolute; left: 0; right: 0; top: 84px; background: var(--navy); padding: 16px 24px; }
+	.pa-nav ul { flex-direction: column; align-items: flex-start; }
+	.pa-cards, .pa-footer__grid { grid-template-columns: 1fr; }
+}

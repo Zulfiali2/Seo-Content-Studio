@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en-GB" class="no-js">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Practice Advisors – Terms and services (test fixture)</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Montserrat:wght@700;800&amp;display=swap">
+	<link rel="stylesheet" href="css/style.css">
+	<link rel="stylesheet" href="css/responsive.css" media="screen">
+	<link rel="stylesheet" href="https://evil.example/steal.css">
+	<style>
+		.pa-home .pa-hero__badge { background: rgba(255,255,255,.12); border-radius: 999px; padding: 6px 14px; display: inline-block; }
+	</style>
+	<base href="https://evil.example/">
+	<meta http-equiv="refresh" content="0;url=https://evil.example/">
+</head>
+<body class="pa-home">
+	<div class="pa-topbar">
+		<div class="pa-container pa-topbar__inner">
+			<span>Specialist accountants for dental practices</span>
+			<a href="tel:+441234567890">01234 567890</a>
+		</div>
+	</div>
+	<header class="pa-header">
+		<div class="pa-container pa-header__inner">
+			<a class="pa-logo" href="index.html"><img src="assets/images/logo.png" alt="Practice Advisors" width="240" height="60"></a>
+			<button class="pa-burger" aria-expanded="false" aria-controls="pa-menu" onclick="alert('inline handler')">Menu</button>
+			<nav id="pa-menu" class="pa-nav">
+				<ul>
+					<li><a href="index.html#services">Services</a></li>
+					<li><a href="about.html">About us</a></li>
+					<li><a href="#faq">FAQ</a></li>
+					<li><a class="pa-btn pa-btn--small" href="javascript:alert(1)">Contact us</a></li>
+				</ul>
+			</nav>
+		</div>
+	</header>
+
+	<main>
+		<section class="pa-hero pa-section">
+			<div class="pa-container pa-hero__grid">
+				<div class="pa-hero__copy">
+					<span class="pa-hero__badge">Terms &amp; Conditions</span>
+					<h1 class="pa-hero__title">Clear terms, no surprises.</h1>
+					<p class="pa-lead">These terms explain how we work with you, what we charge and how either of us can end our services.</p>
+					<a class="pa-btn" href="#terms">Read the terms</a>
+				</div>
+				<div class="pa-hero__panel">
+					<h2>The key points</h2>
+					<ul class="pa-checklist">
+						<li><img src="assets/icons/check.svg" alt="" width="20" height="20"> Fixed fees, agreed before work begins.</li>
+						<li><img src="assets/icons/check.svg" alt="" width="20" height="20"> Your information stays confidential.</li>
+						<li><img src="assets/icons/check.svg" alt="" width="20" height="20"> End our services at any time with notice.</li>
+					</ul>
+				</div>
+			</div>
+		</section>
+
+		<section id="services" class="pa-section pa-services">
+			<div class="pa-container">
+				<h2>Our services</h2>
+				<p>Accounting, tax and advisory services for dentists and dental practices.</p>
+				<div class="pa-cards">
+					<article class="pa-card"><svg class="pa-card__icon" viewBox="0 0 24 24" width="32" height="32" onclick="alert(2)"><script>alert(3)</script><circle cx="12" cy="12" r="10" fill="currentColor"/><a href="javascript:alert(4)"><text x="6" y="16">£</text></a></svg><h3>Tax planning</h3><p>Personal and practice tax, planned ahead.</p></article>
+					<article class="pa-card"><svg class="pa-card__icon" viewBox="0 0 24 24" width="32" height="32"><rect x="3" y="3" width="18" height="18" rx="4" fill="currentColor"/></svg><h3>Accounts</h3><p>Year-end accounts and bookkeeping.</p></article>
+					<article class="pa-card"><svg class="pa-card__icon" viewBox="0 0 24 24" width="32" height="32"><path d="M12 2l10 20H2z" fill="currentColor"/></svg><h3>Payroll</h3><p>Monthly payroll and pension submissions.</p></article>
+				</div>
+			</div>
+		</section>
+
+		<section id="terms" class="pa-section pa-terms">
+			<div class="pa-container pa-terms__grid">
+				<aside class="pa-toc">
+					<p class="pa-toc__title">On this page</p>
+					<ol>
+						<li><a href="#about-terms">About these terms</a></li>
+						<li><a href="#fees">Fees and payment</a></li>
+					</ol>
+				</aside>
+				<div class="pa-terms__body">
+					<h2 id="about-terms">About these terms</h2>
+					<p>These terms apply to you and to <strong>Practice Advisors</strong>. When you become a client we send an engagement letter that sets out the exact services.</p>
+					<p>By using our website or agreeing to work with us, you agree to these terms.</p>
+					<h2 id="fees">Fees and payment</h2>
+					<table class="pa-table">
+						<thead><tr><th>Item</th><th>How it works</th></tr></thead>
+						<tbody>
+							<tr><td>Quote</td><td>A clear written fee before work starts.</td></tr>
+							<tr><td>Invoices</td><td>Payable within 14 days unless agreed otherwise.</td></tr>
+						</tbody>
+					</table>
+					<p>See also our <a href="privacy.html">privacy policy</a>.</p>
+				</div>
+			</div>
+		</section>
+
+		<section id="faq" class="pa-section pa-faq">
+			<div class="pa-container">
+				<h2>Questions</h2>
+				<details class="pa-faq__item" open><summary>Can I end the agreement?</summary><p>Yes, at any time with written notice.</p></details>
+				<details class="pa-faq__item"><summary>Do you work with new practices?</summary><p>Yes, from the start-up stage onwards.</p></details>
+			</div>
+		</section>
+
+		<section class="pa-section pa-cta" style="background-image: url('assets/images/team.jpg')">
+			<div class="pa-container pa-cta__inner reveal">
+				<h2>Questions about these terms?</h2>
+				<p>Our team is happy to explain anything in these terms.</p>
+				<a class="pa-btn pa-btn--light" href="mailto:info@example.com">Email us</a>
+				<iframe src="https://evil.example/frame" title="tracker"></iframe>
+				<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="Video" width="320" height="180" onload="x()"></iframe>
+			</div>
+		</section>
+	</main>
+
+	<footer class="pa-footer">
+		<div class="pa-container pa-footer__grid">
+			<div><img src="assets/images/logo.png" alt="Practice Advisors"><p>Accountants for UK dental practices.</p></div>
+			<div><h4>Contact</h4><p><a href="mailto:info@example.com">info@example.com</a></p></div>
+		</div>
+		<p class="pa-footer__copy">© 2026 Practice Advisors (fixture)</p>
+	</footer>
+	<script src="js/script.js" defer></script>
+	<script src="https://cdn.example.com/tracker.js"></script>
+	<script src="js/missing.js"></script>
+	<script>document.documentElement.classList.remove('no-js');</script>
+	<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Practice Advisors"}</script>
+</body>
+</html>
