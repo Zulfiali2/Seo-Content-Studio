@@ -127,6 +127,12 @@ class WebsiteStudioPage {
 					'canManage' => current_user_can( Capabilities::MANAGE ),
 					'elementor' => $this->environment->elementor(),
 					'urls'      => $urls,
+					// Project ZIP uploads use XMLHttpRequest (for progress), so they need these too.
+					'restUrl'   => esc_url_raw( rest_url( 'aiscs/v1/' ) ),
+					'nonce'     => wp_create_nonce( 'wp_rest' ),
+					'maxUpload' => (int) wp_max_upload_size(),
+					'canUpload' => current_user_can( 'upload_files' ),
+					'canUnfiltered' => current_user_can( 'unfiltered_html' ),
 				)
 			) . ';',
 			'before'

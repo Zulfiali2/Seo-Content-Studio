@@ -14,7 +14,7 @@
 	const { createElement: el, Fragment, useState, useEffect, useCallback, createRoot, render } = wp.element;
 	const { Button, TextControl, SelectControl, CheckboxControl, Notice, Spinner } = wp.components;
 	const apiFetch = wp.apiFetch;
-	const { __, sprintf } = wp.i18n;
+	const { __, _n, sprintf } = wp.i18n;
 	const T = 'ai-seo-content-studio';
 
 	const COLOR_ROLES = [ 'primary', 'secondary', 'accent', 'text', 'heading', 'background', 'surface', 'border' ];
@@ -987,7 +987,7 @@
 				.finally( () => setBusy( false ) );
 		};
 
-		const TYPE_LABELS = { generated: __( 'Generated', T ), clone: __( 'Duplicate', T ), clone_generated: __( 'Clone + new content', T ), converted: __( 'From HTML', T ), screenshot: __( 'From screenshot', T ) };
+		const TYPE_LABELS = { generated: __( 'Generated', T ), clone: __( 'Duplicate', T ), clone_generated: __( 'Clone + new content', T ), converted: __( 'From HTML', T ), screenshot: __( 'From screenshot', T ), imported: __( 'From project ZIP', T ) };
 		return el(
 			Fragment,
 			null,
@@ -1181,6 +1181,641 @@
 			r.css && ( r.css.unsupported_selectors || ( r.css.unsupported_features || [] ).length )
 				? el( 'p', { className: 'description' }, sprintf( __( 'CSS not used: %d selectors (hover states, pseudo-elements, sibling selectors).', T ), r.css.unsupported_selectors || 0 ), ( r.css.unsupported_features || [] ).length ? ' ' + sprintf( __( 'Features without an equivalent: %s.', T ), r.css.unsupported_features.join( ', ' ) ) : '' )
 				: null
+		);
+	}
+
+	/* ------------------------------------------------------------ Website project ZIP import */
+
+	const IMPORT_MODES = {
+		hybrid: [ __( 'Hybrid (recommended)', T ), __( 'Editable native widgets where the result looks exactly like the original; original HTML where Elementor’s widget wrappers would change the design.', T ) ],
+		fidelity: [ __( 'High fidelity', T ), __( 'Each section keeps its original HTML in an HTML widget. Closest to the original; text is edited as HTML.', T ) ],
+		native: [ __( 'Native Elementor', T ), __( 'As many native widgets as possible. Some CSS that depends on exact parent or sibling elements may then differ; those places are reported.', T ) ],
+	};
+	const IMPORT_TEMPLATES = {
+		canvas: [ __( 'Elementor Canvas', T ), __( 'Only the imported page: no theme header or footer. Best when the project has its own header and footer.', T ) ],
+		full_width: [ __( 'Elementor Full Width', T ), __( 'Theme header and footer around the full-width imported page.', T ) ],
+		default: [ __( 'Theme default', T ), __( 'The theme’s normal page layout. Theme width limits and styles may change the design.', T ) ],
+	};
+	const SECTION_KIND_LABELS = { native: __( 'Native Elementor', T ), html: __( 'High-fidelity HTML', T ), hybrid: __( 'Hybrid', T ) };
+	const SCRIPT_FEATURES = {
+		mobile_menu: __( 'mobile menu', T ),
+		tabs: __( 'tabs', T ),
+		accordion: __( 'accordion', T ),
+		slider: __( 'slider', T ),
+		marquee: __( 'marquee', T ),
+		scroll_reveal: __( 'scroll animations (IntersectionObserver)', T ),
+		scroll_effects: __( 'scroll effects', T ),
+		sticky_header: __( 'sticky header', T ),
+		counter: __( 'counters', T ),
+		forms: __( 'form handling', T ),
+		smooth_scroll: __( 'smooth scrolling', T ),
+		progress: __( 'progress indicators', T ),
+		modal: __( 'modal / lightbox', T ),
+	};
+	const SCRIPT_RISKS = {
+		dynamic_code: __( 'runs dynamic code (eval, new Function or string timers)', T ),
+		loads_scripts: __( 'loads more scripts', T ),
+		wordpress_access: __( 'refers to WordPress admin, AJAX or REST interfaces', T ),
+		network: __( 'sends network requests', T ),
+		cookies_storage: __( 'reads or writes cookies or browser storage', T ),
+		redirect: __( 'redirects or opens windows', T ),
+		html_injection: __( 'inserts HTML into the page', T ),
+		messaging: __( 'uses cross-window messaging', T ),
+		obfuscated: __( 'contains encoded or obfuscated code', T ),
+		global_events: __( 'listens to keyboard or clipboard events', T ),
+	};
+	const KIND_LABELS = { html: __( 'HTML', T ), css: __( 'CSS', T ), js: __( 'JavaScript', T ), image: __( 'Images', T ), svg: __( 'SVG icons', T ), font: __( 'Fonts', T ) };
+	const IMPORT_WIDTHS = { desktop: 1280, tablet: 768, mobile: 390 };
+
+	function formatBytes( n ) {
+		if ( n >= 1048576 ) {
+			return ( n / 1048576 ).toFixed( 1 ) + ' MB';
+		}
+		return Math.max( 1, Math.round( n / 1024 ) ) + ' KB';
+	}
+
+	/** REST error (from apiFetch or XHR JSON) to a message and detail lines. */
+	function importError( e ) {
+		const details = e && e.data && Array.isArray( e.data.errors ) ? e.data.errors : [];
+		return { text: errorText( { message: e && e.message } ), details };
+	}
+
+	function ImportNotice( { notice, onRemove } ) {
+		if ( ! notice ) {
+			return null;
+		}
+		return el(
+			Notice,
+			{ status: notice.status, onRemove, className: 'aiscs-studio__notice' },
+			el( 'strong', null, notice.text ),
+			notice.details && notice.details.length ? el( 'ul', { className: 'aiscs-studio__list-plain' }, notice.details.map( ( d, i ) => el( 'li', { key: i }, d ) ) ) : null,
+			notice.next ? el( 'p', null, notice.next ) : null
+		);
+	}
+
+	function ActivityLog( { events } ) {
+		if ( ! events.length ) {
+			return null;
+		}
+		return el(
+			'details',
+			{ className: 'aiscs-studio__analysis', open: true },
+			el( 'summary', null, __( 'Activity', T ) ),
+			el(
+				'ul',
+				{ className: 'aiscs-import__log' },
+				events.map( ( e, i ) => el( 'li', { key: i, className: 'is-' + e.status }, e.text ) )
+			)
+		);
+	}
+
+	function ProjectStructure( { a } ) {
+		const groups = {};
+		a.files.forEach( ( f ) => {
+			( groups[ f.kind ] = groups[ f.kind ] || [] ).push( f );
+		} );
+		return el(
+			'div',
+			{ className: 'aiscs-studio__card' },
+			el( 'h2', null, __( 'Project structure', T ) ),
+			el( 'p', null, sprintf( __( '%1$s: %2$d usable files, %3$s.', T ), a.name, a.files.length, formatBytes( a.total_bytes ) ), a.top_folder ? ' ' + sprintf( __( 'Project folder: %s/', T ), a.top_folder ) : '' ),
+			Object.keys( KIND_LABELS )
+				.filter( ( k ) => groups[ k ] )
+				.map( ( k ) =>
+					el(
+						'details',
+						{ key: k, className: 'aiscs-import__group' },
+						el( 'summary', null, KIND_LABELS[ k ] + ' (' + groups[ k ].length + ')' ),
+						el( 'ul', { className: 'aiscs-import__files' }, groups[ k ].map( ( f ) => el( 'li', { key: f.path }, el( 'code', null, f.path ), ' ', el( 'small', null, formatBytes( f.size ) ), f.path === a.entry ? el( 'span', { className: 'aiscs-studio__badge is-pass' }, __( 'entry page', T ) ) : null ) ) )
+					)
+				),
+			a.rejected.length
+				? el( Notice, { status: 'warning', isDismissible: false }, el( 'strong', null, sprintf( _n( '%d file was refused and never read:', '%d files were refused and never read:', a.rejected.length, T ), a.rejected.length ) ), el( 'ul', { className: 'aiscs-studio__list-plain' }, a.rejected.slice( 0, 30 ).map( ( r, i ) => el( 'li', { key: i }, el( 'code', null, r.path ), ' — ', r.reason ) ) ) )
+				: null,
+			a.ignored.length ? el( 'p', { className: 'description' }, sprintf( _n( '%d other file (document, source map or media) is not used.', '%d other files (documents, source maps, media) are not used.', a.ignored.length, T ), a.ignored.length ) ) : null
+		);
+	}
+
+	function ProjectAnalysis( { a } ) {
+		const s = a.stats;
+		const cell = ( label, value ) => el( 'div', { className: 'aiscs-import__stat', key: label }, el( 'strong', null, value ), el( 'span', null, label ) );
+		const removed = Object.keys( a.removed || {} );
+		const refs = a.references || {};
+		const missingFiles = ( refs.missing || [] ).filter( ( m ) => m.kind !== 'page' );
+		const missingPages = ( refs.missing || [] ).filter( ( m ) => m.kind === 'page' );
+		return el(
+			'div',
+			{ className: 'aiscs-studio__card' },
+			el( 'h2', null, __( 'Project analysis', T ) ),
+			el(
+				'div',
+				{ className: 'aiscs-import__stats' },
+				cell( __( 'HTML files', T ), s.html_files ),
+				cell( __( 'Sections', T ), s.sections ),
+				cell( __( 'Headings', T ), s.headings ),
+				cell( __( 'Text elements', T ), s.text_elements ),
+				cell( __( 'Images and icons', T ), s.images ),
+				cell( __( 'CSS files', T ), s.css_files ),
+				cell( __( 'CSS rules', T ), s.css_rules ),
+				cell( __( 'Media queries', T ), s.media_queries ),
+				cell( __( 'CSS variables', T ), s.css_variables ),
+				cell( __( 'Keyframe animations', T ), s.keyframes ),
+				cell( __( 'Animations', T ), s.animations ),
+				cell( __( 'Interactive components', T ), s.interactive ),
+				cell( __( 'JavaScript files', T ), s.js_files ),
+				cell( __( 'Inline scripts', T ), s.inline_scripts ),
+				cell( __( 'Assets used', T ), s.assets )
+			),
+			el(
+				'p',
+				null,
+				el( 'strong', null, __( 'Fonts:', T ) ),
+				' ',
+				[].concat( a.fonts.web.map( ( f ) => f + ' (' + __( 'web font', T ) + ')' ), a.fonts.files.map( ( f ) => f + ' (' + __( 'local file', T ) + ')' ), a.fonts.families.filter( ( f ) => a.fonts.web.indexOf( f ) < 0 ) ).join( ', ' ) || __( 'none detected', T )
+			),
+			a.css.external.length ? el( 'p', null, el( 'strong', null, __( 'Web font / CDN stylesheets kept:', T ) ), ' ', a.css.external.join( ', ' ) ) : null,
+			( refs.external || [] ).length ? el( 'details', { className: 'aiscs-import__group' }, el( 'summary', null, sprintf( __( 'External resources (%d): loaded by the visitor’s browser, never by the server', T ), refs.external.length ) ), el( 'ul', { className: 'aiscs-studio__list-plain' }, refs.external.slice( 0, 50 ).map( ( u ) => el( 'li', { key: u }, el( 'code', null, u ) ) ) ) ) : null,
+			removed.length || ( refs.refused || [] ).length || ( a.notes || [] ).length
+				? el(
+						Notice,
+						{ status: 'warning', isDismissible: false },
+						el( 'strong', null, __( 'Unsafe or unsupported content was removed or changed:', T ) ),
+						el(
+							'ul',
+							{ className: 'aiscs-studio__list-plain' },
+							removed.map( ( k ) => el( 'li', { key: k }, k + ': ' + a.removed[ k ] ) ),
+							( refs.refused || [] ).slice( 0, 10 ).map( ( r, i ) => el( 'li', { key: 'r' + i }, __( 'Not used:', T ), ' ', el( 'code', null, r ) ) ),
+							( a.notes || [] ).map( ( n, i ) => el( 'li', { key: 'n' + i }, n ) )
+						)
+				  )
+				: null,
+			missingFiles.length
+				? el( Notice, { status: 'warning', isDismissible: false }, el( 'strong', null, sprintf( _n( '%d file the page uses is missing from the ZIP:', '%d files the page uses are missing from the ZIP:', missingFiles.length, T ), missingFiles.length ) ), el( 'ul', { className: 'aiscs-studio__list-plain' }, missingFiles.slice( 0, 30 ).map( ( m, i ) => el( 'li', { key: i }, el( 'code', null, m.ref ), ' ', sprintf( __( '(in %s)', T ), m.from ) ) ) ), el( 'p', null, __( 'Add them to the ZIP and upload it again, or continue without them (the draft is then marked as partial).', T ) ) )
+				: null,
+			missingPages.length
+				? el( Notice, { status: 'info', isDismissible: false }, el( 'strong', null, sprintf( _n( '%d link points to a page that is not in the ZIP:', '%d links point to pages that are not in the ZIP:', missingPages.length, T ), missingPages.length ) ), el( 'ul', { className: 'aiscs-studio__list-plain' }, missingPages.slice( 0, 30 ).map( ( m, i ) => el( 'li', { key: i }, el( 'code', null, m.ref ) ) ) ), el( 'p', null, __( 'These links are removed from the draft. Link the text to the right WordPress pages in Elementor.', T ) ) )
+				: null,
+			( refs.pages || [] ).length ? el( 'p', { className: 'description' }, sprintf( __( 'Links to other pages of the project point to “#” until those pages exist in WordPress: %s', T ), refs.pages.join( ', ' ) ) ) : null,
+			el( ScriptList, { scripts: a.scripts } )
+		);
+	}
+
+	function ScriptList( { scripts } ) {
+		if ( ! scripts || ! scripts.length ) {
+			return el( 'p', null, el( 'strong', null, __( 'JavaScript:', T ) ), ' ', __( 'none', T ) );
+		}
+		return el(
+			'div',
+			null,
+			el( 'h3', null, __( 'JavaScript (analysed, never run here)', T ) ),
+			el(
+				'table',
+				{ className: 'widefat striped' },
+				el( 'thead', null, el( 'tr', null, el( 'th', null, __( 'Script', T ) ), el( 'th', null, __( 'Does', T ) ), el( 'th', null, __( 'Needs care', T ) ) ) ),
+				el(
+					'tbody',
+					null,
+					scripts.map( ( s, i ) =>
+						el(
+							'tr',
+							{ key: i },
+							el( 'td', null, el( 'code', null, s.name ), s.type === 'external' ? ' ' + __( '(external: never loaded)', T ) : null, s.type === 'missing' ? ' ' + __( '(missing from the ZIP)', T ) : null, s.type === 'data' ? ' ' + __( '(data, not code)', T ) : null, s.module ? ' ' + __( '(ES module: not supported)', T ) : null ),
+							el( 'td', null, ( s.features || [] ).map( ( f ) => SCRIPT_FEATURES[ f ] || f ).join( ', ' ) || '—' ),
+							el( 'td', null, s.level ? el( 'span', { className: 'aiscs-studio__badge is-' + ( s.level === 'high' ? 'fail' : s.level === 'medium' ? 'warning' : 'pass' ) }, s.level ) : null, ' ', ( s.risks || [] ).map( ( r ) => SCRIPT_RISKS[ r.key ] || r.key ).join( '; ' ) )
+						)
+					)
+				)
+			),
+			el( 'p', { className: 'description' }, __( 'Scripts are stored with the draft but stay off until an administrator reviews and approves them for that page. Approved scripts run only on that page’s front end, never in the admin or the Elementor editor.', T ) )
+		);
+	}
+
+	function ConversionPlan( { report } ) {
+		if ( ! report ) {
+			return null;
+		}
+		const c = report.counts || {};
+		return el(
+			'div',
+			{ className: 'aiscs-studio__card' },
+			el( 'h2', null, __( 'Conversion report', T ) ),
+			el(
+				'p',
+				null,
+				sprintf( __( 'Containers: %1$d. Native widgets: %2$d (headings %3$d, text blocks %4$d, images %5$d). HTML widgets: %6$d.', T ), c.containers || 0, c.native || 0, c.headings || 0, c.text || 0, c.images || 0, c.html || 0 ),
+				' ',
+				report.css ? sprintf( __( 'CSS preserved and scoped to the page: rules %1$d, media queries %2$d, keyframe animations %3$d, font faces %4$d.', T ), report.css.rules, report.css.media, report.css.keyframes, report.css.font_faces ) : ''
+			),
+			el(
+				'table',
+				{ className: 'widefat striped' },
+				el( 'thead', null, el( 'tr', null, el( 'th', null, '#' ), el( 'th', null, __( 'Section', T ) ), el( 'th', null, __( 'Result', T ) ), el( 'th', null, __( 'Why HTML is kept', T ) ) ) ),
+				el(
+					'tbody',
+					null,
+					( report.sections || [] ).map( ( s, i ) =>
+						el(
+							'tr',
+							{ key: i },
+							el( 'td', null, i + 1 ),
+							el( 'td', null, s.label || '—', s.tag ? el( 'small', null, ' <' + s.tag + '>' ) : null ),
+							el( 'td', null, el( 'span', { className: 'aiscs-studio__badge is-' + ( s.type === 'native' ? 'pass' : s.type === 'html' ? 'not_checked' : 'warning' ) }, SECTION_KIND_LABELS[ s.type ] || s.type ), ' ', sprintf( __( '%1$d native, %2$d HTML', T ), s.native, s.html ) ),
+							el( 'td', null, ( s.reasons || [] ).join( ' ' ) || '—' )
+						)
+					)
+				)
+			),
+			el( 'p', { className: 'description' }, __( 'HTML widgets show the original design exactly but are edited as HTML in Elementor, not with separate widgets.', T ) ),
+			( report.notes || [] ).length ? el( Notice, { status: 'info', isDismissible: false }, el( 'ul', { className: 'aiscs-studio__list-plain' }, report.notes.map( ( n, i ) => el( 'li', { key: i }, n ) ) ) ) : null
+		);
+	}
+
+	function ImportPreview( { token, settings: all, onReport } ) {
+		// Only the settings that change the page's look rebuild the preview (not the title or target).
+		const settings = { entry: all.entry, mode: all.mode, template: all.template, header_footer: all.header_footer, root_font: all.root_font };
+		const [ view, setView ] = useState( 'compare' );
+		const [ device, setDevice ] = useState( 'desktop' );
+		const [ docs, setDocs ] = useState( { original: '', converted: '' } );
+		const [ busy, setBusy ] = useState( false );
+		const [ status, setStatus ] = useState( '' );
+		const load = useCallback( () => {
+			setBusy( true );
+			setStatus( __( 'Building the previews…', T ) );
+			Promise.all(
+				[ 'original', 'converted' ].map( ( target ) => apiFetch( { path: '/aiscs/v1/design/import/' + token + '/preview', method: 'POST', data: { target, settings } } ) )
+			)
+				.then( ( [ o, c ] ) => {
+					setDocs( { original: o.html, converted: c.html } );
+					onReport( c.report );
+					const problems = Object.assign( {}, o.problems || {}, c.problems || {} );
+					const count = Object.keys( problems ).length;
+					setStatus( count ? sprintf( __( 'Preview ready. %d assets could not be shown.', T ), count ) : __( 'Preview ready.', T ) );
+				} )
+				.catch( ( e ) => setStatus( errorText( e ) ) )
+				.finally( () => setBusy( false ) );
+		}, [ token, JSON.stringify( settings ) ] );
+		useEffect( load, [ load ] );
+		const frame = ( which, label ) =>
+			el(
+				'div',
+				{ className: 'aiscs-import__frame' },
+				el( 'p', { className: 'aiscs-import__frame-label' }, label ),
+				el( 'iframe', { title: label, sandbox: '', srcDoc: docs[ which ], style: { width: IMPORT_WIDTHS[ device ] + 'px' }, className: 'aiscs-studio__frame' } )
+			);
+		return el(
+			'div',
+			{ className: 'aiscs-studio__card' },
+			el( 'h2', null, __( 'Preview', T ) ),
+			el(
+				'div',
+				{ className: 'aiscs-studio__actions' },
+				[ [ 'compare', __( 'Compare side by side', T ) ], [ 'original', __( 'Original', T ) ], [ 'converted', __( 'Converted', T ) ] ].map( ( [ k, label ] ) => el( Button, { key: k, variant: k === view ? 'primary' : 'secondary', onClick: () => setView( k ) }, label ) ),
+				el( 'span', { className: 'aiscs-import__sep' } ),
+				Object.keys( IMPORT_WIDTHS ).map( ( d ) => el( Button, { key: d, variant: d === device ? 'primary' : 'secondary', onClick: () => setDevice( d ) }, { desktop: __( 'Desktop', T ), tablet: __( 'Tablet', T ), mobile: __( 'Mobile', T ) }[ d ] + ' (' + IMPORT_WIDTHS[ d ] + 'px)' ) ),
+				el( Button, { variant: 'tertiary', onClick: load, isBusy: busy, disabled: busy }, __( 'Refresh preview', T ) ),
+				busy ? el( Spinner ) : null,
+				el( 'span', { className: 'description' }, status )
+			),
+			el(
+				'div',
+				{ className: 'aiscs-studio__frame-wrap aiscs-import__frames is-' + view + ' is-' + device },
+				'converted' !== view ? frame( 'original', __( 'Original project (scripts off)', T ) ) : null,
+				'original' !== view ? frame( 'converted', __( 'Converted page (approximation of Elementor’s output)', T ) ) : null
+			),
+			el( 'p', { className: 'description' }, __( 'Both previews run without JavaScript, in a sandbox. The converted preview imitates Elementor’s default styles; your theme and other plugins can still change the real draft, so check it with Elementor’s Preview before publishing.', T ) )
+		);
+	}
+
+	function ImportSettings( { a, settings, set, targets } ) {
+		const radio = ( key, options ) =>
+			el(
+				'div',
+				{ className: 'aiscs-import__choices' },
+				Object.keys( options ).map( ( k ) =>
+					el(
+						'label',
+						{ key: k, className: 'aiscs-import__choice' + ( settings[ key ] === k ? ' is-selected' : '' ) },
+						el( 'input', { type: 'radio', name: 'aiscs-' + key, checked: settings[ key ] === k, onChange: () => set( key )( k ) } ),
+						el( 'strong', null, options[ k ][ 0 ] ),
+						el( 'span', null, options[ k ][ 1 ] )
+					)
+				)
+			);
+		return el(
+			'div',
+			{ className: 'aiscs-studio__card' },
+			el( 'h2', null, __( 'Conversion settings', T ) ),
+			el(
+				'div',
+				{ className: 'aiscs-studio__fields' },
+				el( TextControl, { label: __( 'Page title', T ), value: settings.title, onChange: set( 'title' ), __nextHasNoMarginBottom: true } ),
+				a.entries.length > 1
+					? el( SelectControl, { label: __( 'Entry page', T ), value: settings.entry, options: a.entries.map( ( p ) => ( { label: p, value: p } ) ), onChange: set( 'entry' ), __nextHasNoMarginBottom: true } )
+					: null,
+				el( SelectControl, {
+					label: __( 'Target WordPress page', T ),
+					value: String( settings.target ),
+					options: [ { label: __( 'Create a new draft page', T ), value: '0' } ].concat( targets.map( ( t ) => ( { label: sprintf( __( 'Update imported draft: %s', T ), t.title || '#' + t.id ), value: String( t.id ) } ) ) ),
+					onChange: ( v ) => set( 'target' )( parseInt( v, 10 ) || 0 ),
+					__nextHasNoMarginBottom: true,
+				} )
+			),
+			el( 'h3', null, __( 'Elementor conversion mode', T ) ),
+			radio( 'mode', IMPORT_MODES ),
+			el( 'h3', null, __( 'Page layout', T ) ),
+			a.has_own_chrome ? el( 'p', { className: 'description' }, __( 'This project has its own header, navigation or footer. Elementor Canvas avoids showing two headers. Choose another layout only if you want the theme’s header and footer.', T ) ) : null,
+			radio( 'template', IMPORT_TEMPLATES ),
+			el( SelectControl, {
+				label: __( 'Project header, navigation and footer', T ),
+				value: settings.header_footer,
+				options: [ { label: __( 'Include them in the page', T ), value: 'include' }, { label: __( 'Leave them out (use the site’s own)', T ), value: 'skip' } ],
+				onChange: set( 'header_footer' ),
+				__nextHasNoMarginBottom: true,
+			} ),
+			el( 'h3', null, __( 'Assets, CSS and JavaScript', T ) ),
+			el( CheckboxControl, { label: __( 'Import images into the Media Library and reuse identical images already imported (fonts are stored in the uploads folder; SVG stays inline)', T ), checked: settings.reuse_assets, onChange: set( 'reuse_assets' ), __nextHasNoMarginBottom: true } ),
+			el( CheckboxControl, { label: __( 'Use the project’s root font size on this page (keeps rem units the same size as in the original)', T ), checked: settings.root_font, onChange: set( 'root_font' ), __nextHasNoMarginBottom: true } ),
+			el( 'p', { className: 'description' }, __( 'Page-specific CSS: all project CSS (variables, media queries, animations, hover effects, pseudo-elements) is kept and scoped to this page only, so it cannot change the theme, other pages or the admin. Responsive breakpoints are kept as written.', T ) ),
+			el( SelectControl, {
+				label: __( 'JavaScript support', T ),
+				value: settings.scripts,
+				options: [ { label: __( 'Store the scripts with the draft for an administrator to review and approve', T ), value: 'request' }, { label: __( 'Do not keep any scripts', T ), value: 'off' } ],
+				onChange: set( 'scripts' ),
+				__nextHasNoMarginBottom: true,
+			} )
+		);
+	}
+
+	function ScriptApproval( { pageId } ) {
+		const [ data, setData ] = useState( null );
+		const [ chosen, setChosen ] = useState( [] );
+		const [ busy, setBusy ] = useState( false );
+		const [ notice, setNotice ] = useState( null );
+		useEffect( () => {
+			apiFetch( { path: '/aiscs/v1/design/import/pages/' + pageId + '/scripts' } )
+				.then( ( r ) => {
+					setData( r );
+					setChosen( r.scripts.filter( ( s ) => s.approved ).map( ( s ) => s.hash ) );
+				} )
+				.catch( ( e ) => setNotice( { status: 'error', text: errorText( e ) } ) );
+		}, [ pageId ] );
+		if ( ! data || ! data.scripts.length ) {
+			return null;
+		}
+		const toggle = ( hash ) => ( on ) => setChosen( on ? chosen.concat( hash ) : chosen.filter( ( h ) => h !== hash ) );
+		const save = () => {
+			setBusy( true );
+			apiFetch( { path: '/aiscs/v1/design/import/pages/' + pageId + '/scripts', method: 'POST', data: { approve: chosen } } )
+				.then( ( r ) => {
+					setData( r );
+					setNotice( { status: 'success', text: sprintf( _n( '%d script approved for this page’s front end.', '%d scripts approved for this page’s front end.', r.scripts.filter( ( s ) => s.approved ).length, T ), r.scripts.filter( ( s ) => s.approved ).length ) } );
+				} )
+				.catch( ( e ) => setNotice( { status: 'error', text: errorText( e ) } ) )
+				.finally( () => setBusy( false ) );
+		};
+		return el(
+			'div',
+			{ className: 'aiscs-studio__card' },
+			el( 'h2', null, __( 'JavaScript approval', T ) ),
+			el( ImportNotice, { notice, onRemove: () => setNotice( null ) } ),
+			el( 'p', null, __( 'These scripts came from the ZIP. None runs until approved. Read each one before approving: an approved script runs for every visitor of this page, including logged-in administrators.', T ) ),
+			data.scripts.map( ( s ) =>
+				el(
+					'div',
+					{ key: s.hash, className: 'aiscs-import__script' },
+					data.can_approve
+						? el( CheckboxControl, { label: s.name + ' (' + formatBytes( s.bytes ) + ')', checked: chosen.indexOf( s.hash ) >= 0, onChange: toggle( s.hash ), __nextHasNoMarginBottom: true } )
+						: el( 'strong', null, s.name, s.approved ? ' — ' + __( 'approved', T ) : ' — ' + __( 'not approved', T ) ),
+					el( 'p', null, ( s.features || [] ).map( ( f ) => SCRIPT_FEATURES[ f ] || f ).join( ', ' ) || '—', ' ', s.level !== 'none' ? el( 'span', { className: 'aiscs-studio__badge is-' + ( s.level === 'high' ? 'fail' : 'warning' ) }, ( s.risks || [] ).map( ( r ) => SCRIPT_RISKS[ r.key ] || r.key ).join( '; ' ) ) : null ),
+					el( 'details', null, el( 'summary', null, __( 'Show the code', T ) ), el( 'pre', { className: 'aiscs-import__code' }, s.code ) )
+				)
+			),
+			data.can_approve
+				? el( 'div', { className: 'aiscs-studio__actions' }, el( Button, { variant: 'primary', isBusy: busy, disabled: busy, onClick: save }, __( 'Save script approvals', T ) ) )
+				: el( Notice, { status: 'info', isDismissible: false }, __( 'Only an administrator (a user who may publish unfiltered HTML) can approve these scripts.', T ) )
+		);
+	}
+
+	function ZipImport() {
+		const [ file, setFile ] = useState( null );
+		const [ drag, setDrag ] = useState( false );
+		const [ progress, setProgress ] = useState( 0 );
+		const [ busy, setBusy ] = useState( false );
+		const [ analysis, setAnalysis ] = useState( null );
+		const [ settings, setSettings ] = useState( null );
+		const [ report, setReport ] = useState( null );
+		const [ targets, setTargets ] = useState( [] );
+		const [ build, setBuild ] = useState( null );
+		const [ result, setResult ] = useState( null );
+		const [ notice, setNotice ] = useState( null );
+		const [ events, setEvents ] = useState( [] );
+		const log = ( status, text ) => setEvents( ( list ) => list.concat( { status, text } ) );
+		const maxUpload = boot.maxUpload || 0;
+
+		useEffect( () => {
+			apiFetch( { path: '/aiscs/v1/design/import/targets' } ).then( setTargets ).catch( () => setTargets( [] ) );
+		}, [ result ] );
+
+		const loaded = ( a ) => {
+			setAnalysis( a );
+			setSettings( Object.assign( {}, a.defaults ) );
+			setReport( a.plan );
+			log( 'success', sprintf( __( 'ZIP validated: %1$d usable files (%2$d refused, %3$d not used).', T ), a.files.length, a.rejected.length, a.ignored.length ) );
+			log( 'success', sprintf( __( 'HTML entry point: %s', T ), a.entry ) + ( a.entries.length > 1 ? ' ' + sprintf( __( '(%d HTML pages in the project)', T ), a.entries.length ) : '' ) );
+			log( a.css.files.length ? 'success' : 'warning', sprintf( __( 'CSS: %1$s, %2$s, %3$s, %4$s.', T ), sprintf( _n( '%d file', '%d files', a.css.files.length, T ), a.css.files.length ), sprintf( _n( '%d inline style block', '%d inline style blocks', a.css.inline, T ), a.css.inline ), sprintf( _n( '%d rule', '%d rules', a.stats.css_rules, T ), a.stats.css_rules ), sprintf( _n( '%d media query', '%d media queries', a.stats.media_queries, T ), a.stats.media_queries ) ) );
+			log( 'info', sprintf( __( 'JavaScript: %1$s and %2$s detected (analysed, not run).', T ), sprintf( _n( '%d file', '%d files', a.stats.js_files, T ), a.stats.js_files ), sprintf( _n( '%d inline script', '%d inline scripts', a.stats.inline_scripts, T ), a.stats.inline_scripts ) ) );
+			const missingAssets = ( a.references.missing || [] ).filter( ( m ) => m.kind !== 'page' ).length;
+			log( missingAssets ? 'warning' : 'success', sprintf( __( 'Assets: %1$d used by the page, %2$d missing.', T ), a.stats.assets, missingAssets ) );
+			log( 'success', __( 'Analysis completed.', T ) );
+		};
+
+		const choose = ( f ) => {
+			setNotice( null );
+			if ( ! f ) {
+				return;
+			}
+			if ( ! /\.zip$/i.test( f.name ) ) {
+				setNotice( { status: 'error', text: __( 'Choose a .zip file that contains the whole website project.', T ) } );
+				return;
+			}
+			if ( maxUpload && f.size > maxUpload ) {
+				setNotice( { status: 'error', text: sprintf( __( 'The ZIP is %1$s, but this server accepts uploads up to %2$s.', T ), formatBytes( f.size ), formatBytes( maxUpload ) ), next: __( 'Make the ZIP smaller (remove unused images or videos), or ask your host to raise upload_max_filesize and post_max_size.', T ) } );
+				return;
+			}
+			setFile( f );
+		};
+
+		const upload = () => {
+			if ( ! file ) {
+				return;
+			}
+			setBusy( true );
+			setProgress( 0 );
+			setEvents( [] );
+			setNotice( null );
+			log( 'info', sprintf( __( 'Upload started: %1$s (%2$s).', T ), file.name, formatBytes( file.size ) ) );
+			const body = new window.FormData();
+			body.append( 'archive', file );
+			const xhr = new window.XMLHttpRequest();
+			xhr.open( 'POST', boot.restUrl + 'design/import/upload' );
+			xhr.setRequestHeader( 'X-WP-Nonce', boot.nonce );
+			xhr.upload.onprogress = ( e ) => e.lengthComputable && setProgress( Math.round( ( 100 * e.loaded ) / e.total ) );
+			xhr.onload = () => {
+				setBusy( false );
+				let json = null;
+				try {
+					json = JSON.parse( xhr.responseText );
+				} catch ( err ) {
+					json = null;
+				}
+				if ( xhr.status >= 200 && xhr.status < 300 && json ) {
+					log( 'success', __( 'ZIP uploaded.', T ) );
+					loaded( json );
+					return;
+				}
+				const e = importError( json || { message: sprintf( __( 'The server answered with HTTP %d.', T ), xhr.status ) } );
+				log( 'error', __( 'ZIP validation failed.', T ) );
+				setNotice( { status: 'error', text: e.text, details: e.details, next: __( 'Fix the ZIP and upload it again.', T ) } );
+			};
+			xhr.onerror = () => {
+				setBusy( false );
+				log( 'error', __( 'Upload failed.', T ) );
+				setNotice( { status: 'error', text: __( 'The upload failed. Check your connection and try again.', T ) } );
+			};
+			xhr.send( body );
+		};
+
+		const set = ( key ) => ( value ) => {
+			if ( 'entry' === key ) {
+				setBusy( true );
+				apiFetch( { path: '/aiscs/v1/design/import/' + analysis.token + '/analyze', method: 'POST', data: { entry: value } } )
+					.then( loaded )
+					.catch( ( e ) => setNotice( Object.assign( { status: 'error' }, importError( e ) ) ) )
+					.finally( () => setBusy( false ) );
+				return;
+			}
+			setSettings( Object.assign( {}, settings, { [ key ]: value } ) );
+		};
+
+		const create = () => {
+			setBuild( { message: __( 'Conversion started…', T ), done: 0, total: 0 } );
+			setNotice( null );
+			log( 'info', __( 'Conversion started.', T ) );
+			const step = () =>
+				apiFetch( { path: '/aiscs/v1/design/import/' + analysis.token + '/build', method: 'POST', data: { settings } } )
+					.then( ( r ) => {
+						if ( ! r.done ) {
+							setBuild( { message: r.message, done: r.progress.done, total: r.progress.total } );
+							return step();
+						}
+						setBuild( null );
+						setResult( r );
+						log( r.partial ? 'warning' : 'success', r.partial ? __( 'Partial conversion: the draft was created, but some files the page uses were missing or could not be imported.', T ) : __( 'Conversion completed.', T ) );
+						log( 'success', r.updated ? __( 'Draft updated.', T ) : __( 'Draft created.', T ) );
+						return null;
+					} )
+					.catch( ( e ) => {
+						setBuild( null );
+						const err = importError( e );
+						log( 'error', __( 'Conversion failed.', T ) );
+						setNotice( { status: 'error', text: err.text, details: err.details, next: __( 'Nothing was saved. Change the settings or the project and try again.', T ) } );
+					} );
+			step();
+		};
+
+		const restart = () => {
+			if ( analysis ) {
+				apiFetch( { path: '/aiscs/v1/design/import/' + analysis.token, method: 'DELETE' } ).catch( () => null );
+			}
+			setFile( null );
+			setAnalysis( null );
+			setSettings( null );
+			setResult( null );
+			setReport( null );
+			setEvents( [] );
+			setNotice( null );
+		};
+
+		if ( result ) {
+			return el(
+				Fragment,
+				null,
+				el( ImportNotice, { notice, onRemove: () => setNotice( null ) } ),
+				result.partial ? el( Notice, { status: 'warning', isDismissible: false }, __( 'The page was only partially converted: some files it uses were missing from the ZIP or could not be imported. See the notes below.', T ) ) : null,
+				el( DraftResult, { result } ),
+				el( ConversionPlan, { report: Object.assign( {}, result.report, { notes: result.notes || result.report.notes } ) } ),
+				el( ScriptApproval, { pageId: result.page_id } ),
+				el( ActivityLog, { events } ),
+				el( 'div', { className: 'aiscs-studio__actions' }, el( Button, { variant: 'secondary', onClick: () => setResult( null ) }, __( 'Back to the settings', T ) ), el( Button, { variant: 'tertiary', onClick: restart }, __( 'Import another project', T ) ) )
+			);
+		}
+
+		return el(
+			Fragment,
+			null,
+			el( 'p', { className: 'description' }, __( 'Upload one ZIP with the whole website project: HTML, CSS, JavaScript, images, icons and fonts in any folder structure. The plugin finds the entry page and everything it uses, keeps the original design and CSS (scoped to the new page), and builds an Elementor draft. Nothing in the ZIP is run, and nothing is saved until you create the draft.', T ) ),
+			el( ImportNotice, { notice, onRemove: () => setNotice( null ) } ),
+			! analysis
+				? el(
+						'div',
+						{
+							className: 'aiscs-import__drop' + ( drag ? ' is-drag' : '' ),
+							onDragOver: ( e ) => {
+								e.preventDefault();
+								setDrag( true );
+							},
+							onDragLeave: () => setDrag( false ),
+							onDrop: ( e ) => {
+								e.preventDefault();
+								setDrag( false );
+								choose( e.dataTransfer.files && e.dataTransfer.files[ 0 ] );
+							},
+						},
+						el( 'p', null, el( 'strong', null, __( 'Drag the project ZIP here', T ) ), ' ', __( 'or', T ), ' ' ),
+						el( 'label', { className: 'button' }, __( 'Browse for a ZIP', T ), el( 'input', { type: 'file', accept: '.zip,application/zip', className: 'screen-reader-text', onChange: ( e ) => choose( e.target.files && e.target.files[ 0 ] ) } ) ),
+						file ? el( 'p', null, el( 'code', null, file.name ), ' — ', formatBytes( file.size ) ) : null,
+						maxUpload ? el( 'p', { className: 'description' }, sprintf( __( 'Largest upload this server accepts: %s.', T ), formatBytes( maxUpload ) ) ) : null,
+						busy ? el( 'div', { className: 'aiscs-import__progress' }, el( 'span', { style: { width: progress + '%' } } ), el( 'em', null, progress < 100 ? sprintf( __( 'Uploading… %d%%', T ), progress ) : __( 'Validating and analysing the project…', T ) ) ) : null,
+						el( 'div', { className: 'aiscs-studio__actions' }, el( Button, { variant: 'primary', isBusy: busy, disabled: busy || ! file || ! boot.canUpload, onClick: upload }, __( 'Upload and analyse', T ) ) ),
+						! boot.canUpload ? el( Notice, { status: 'warning', isDismissible: false }, __( 'You need permission to upload files to import a project.', T ) ) : null
+				  )
+				: null,
+			el( ActivityLog, { events } ),
+			analysis
+				? el(
+						Fragment,
+						null,
+						el( ProjectStructure, { a: analysis } ),
+						el( ProjectAnalysis, { a: analysis } ),
+						el( ImportSettings, { a: analysis, settings, set, targets } ),
+						el( ImportPreview, { token: analysis.token, settings, onReport: setReport } ),
+						el( ConversionPlan, { report } ),
+						build
+							? el( 'div', { className: 'aiscs-studio__card' }, el( 'p', null, build.message ), build.total ? el( 'div', { className: 'aiscs-import__progress' }, el( 'span', { style: { width: Math.round( ( 100 * build.done ) / build.total ) + '%' } } ) ) : el( Spinner ) )
+							: null,
+						el(
+							'div',
+							{ className: 'aiscs-studio__actions' },
+							el( Button, { variant: 'primary', isBusy: !! build, disabled: !! build || busy, onClick: create }, settings.target ? __( 'Update draft', T ) : __( 'Create draft', T ) ),
+							el( Button, { variant: 'tertiary', disabled: !! build, onClick: restart }, __( 'Start again with another ZIP', T ) )
+						)
+				  )
+				: null
+		);
+	}
+
+	function HtmlImport() {
+		const [ tab, setTab ] = useState( 'zip' );
+		return el(
+			Fragment,
+			null,
+			el(
+				'div',
+				{ className: 'aiscs-studio__tabs' },
+				el( Button, { variant: 'zip' === tab ? 'primary' : 'secondary', onClick: () => setTab( 'zip' ) }, __( 'Website project (ZIP)', T ) ),
+				el( Button, { variant: 'paste' === tab ? 'primary' : 'secondary', onClick: () => setTab( 'paste' ) }, __( 'Paste HTML and CSS (rebuild with native widgets)', T ) )
+			),
+			'zip' === tab ? el( ZipImport ) : el( HtmlToElementor )
 		);
 	}
 
@@ -2577,7 +3212,7 @@
 		profiles: [ __( 'Brand Profiles', T ), Profiles ],
 		clone: [ __( 'Clone Existing Page', T ), ClonePage ],
 		pages: [ __( 'Generated Pages', T ), GeneratedPages ],
-		html: [ __( 'HTML to Elementor', T ), HtmlToElementor ],
+		html: [ __( 'HTML to Elementor', T ), HtmlImport ],
 		image: [ __( 'Image to Design', T ), ImageToDesign ],
 		generate: [ __( 'AI Page Generator', T ), PageGenerator ],
 		consistency: [ __( 'Design Consistency Checker', T ), () => el( PageTools, { tab: 'consistency' } ) ],

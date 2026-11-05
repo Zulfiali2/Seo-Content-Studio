@@ -400,7 +400,15 @@ class ImportService {
 				'notes'    => array_values( array_unique( array_merge( $built['notes'], $notes, $scoper->warnings(), $page->notes ) ) ),
 				'css'      => $scoper->stats(),
 				'keyframes' => count( $scoper->keyframes() ),
-				'missing'  => $refs->report()['missing'],
+				'missing'  => array_merge(
+					$refs->report()['missing'],
+					array_values(
+						array_map(
+							static fn ( array $s ): array => array( 'ref' => (string) $s['ref'], 'from' => $entry, 'kind' => 'script' ),
+							array_filter( $page->scripts, static fn ( array $s ): bool => 'missing' === $s['type'] )
+						)
+					)
+				),
 				'pages'    => $refs->report()['pages'],
 			),
 		);
@@ -511,7 +519,13 @@ class ImportService {
 			$user
 		);
 
-		$partial = array() !== $failed || array() !== $result['report']['missing'];
+		// Missing links to other project pages do not change this page; missing files it uses do.
+		$missing_files = array_filter( $result['report']['missing'], static fn ( array $m ): bool => 'page' !== ( $m['kind'] ?? '' ) );
+		$partial       = array() !== $failed || array() !== $missing_files;
+		foreach ( array_slice( $missing_files, 0, 20 ) as $m ) {
+			/* translators: %s: file referenced by the page. */
+			$notes[] = sprintf( __( 'Missing from the ZIP: %s', 'ai-seo-content-studio' ), $m['ref'] );
+		}
 		return $draft + array(
 			'report'   => $result['report'],
 			'partial'  => $partial,
@@ -647,7 +661,8 @@ class ImportService {
 	 */
 	private function scripts( ProjectArchive $archive, ProjectParser $page ): array {
 		$out    = array();
-		$budget = $this->limits['js_bytes'];
+		$budget   = $this->limits['js_bytes'];
+		$inline_n = 0;
 		foreach ( $page->scripts as $i => $script ) {
 			$row = array(
 				'type'   => (string) $script['type'],
@@ -663,7 +678,7 @@ class ImportService {
 				}
 			} elseif ( 'inline' === $script['type'] ) {
 				$code        = (string) $script['code'];
-				$row['name'] = sprintf( __( 'Inline script %1$d in %2$s', 'ai-seo-content-studio' ), $i + 1, $script['path'] );
+				$row['name'] = sprintf( __( 'Inline script %1$d in %2$s', 'ai-seo-content-studio' ), ++$inline_n, $script['path'] );
 			}
 			if ( null !== $code ) {
 				$budget -= strlen( $code );

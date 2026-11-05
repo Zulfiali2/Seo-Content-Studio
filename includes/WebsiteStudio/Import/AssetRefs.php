@@ -32,7 +32,7 @@ final class AssetRefs {
 	 */
 	private array $used = array();
 
-	/** @var array<string, string> reference => referring file */
+	/** @var array<string, array{0: string, 1: string}> reference => [referring file, page|asset] */
 	private array $missing = array();
 
 	/** @var string[] */
@@ -123,7 +123,7 @@ final class AssetRefs {
 			if ( 'link' === $context && '' === $path_ref && '' !== $fragment ) {
 				return $fragment;
 			}
-			$this->missing[ $ref ] = $from;
+			$this->missing[ $ref ] ??= array( $from, 'link' === $context ? 'page' : 'asset' );
 			return null;
 		}
 		$kind = $this->archive->files()[ $path ]['kind'];
@@ -194,10 +194,11 @@ final class AssetRefs {
 	 */
 	public function report(): array {
 		$missing = array();
-		foreach ( $this->missing as $ref => $from ) {
+		foreach ( $this->missing as $ref => [ $from, $kind ] ) {
 			$missing[] = array(
 				'ref'  => mb_substr( $ref, 0, 200 ),
 				'from' => $from,
+				'kind' => $kind,
 			);
 		}
 		return array(
