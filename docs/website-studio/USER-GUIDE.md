@@ -45,7 +45,8 @@ Users need the **Generate content** capability (administrators and editors have 
 ## Clone, HTML and screenshot
 
 - **Clone Existing Page**: choose a page, choose which texts to rewrite, and enter the new topic. The original page is never changed.
-- **HTML to Elementor**: paste HTML and CSS (scripts are never run), parse it, review the report, and convert it to a draft.
+- **HTML to Elementor → Website project (ZIP)**: upload the whole project as one ZIP. Review the analysis and the side-by-side preview, choose the mode (hybrid is recommended) and the page layout (Elementor Canvas when the project has its own header and footer), then create the draft. Scripts stay off until an administrator approves them. See `PROJECT-IMPORT.md`.
+- **HTML to Elementor → Paste HTML and CSS**: paste HTML and CSS (scripts are never run), parse it, review the report, and convert it to a draft with native widgets only.
 - **Image to Design**: upload a PNG, JPEG or WebP (up to 10 MB). Review the structure the vision model found, then create the draft with new content or with the screenshot's own text. The screenshot is deleted right after it is read.
 
 ## Page Tools

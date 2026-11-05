@@ -486,6 +486,14 @@ class ProjectImportTest extends TestCase {
 		$this->expectImportError( 'upload_expired', fn () => $service->analyze( $a['token'], 2 ) );
 		$this->expectImportError( 'zip_required', fn () => $service->upload( $this->zip( self::fixture(), 'x.zip' ), 'site.tar', 2 ) );
 		$this->expectImportError( 'zip_no_html', fn () => $service->upload( $this->zip( array( 'a.css' => 'a{}' ), 'nohtml.zip' ), 'nohtml.zip', 2 ) );
+		// Daily clean-up removes uploads older than a day and keeps recent ones.
+		$store = new ImportStore( $this->tmp . '/store' );
+		$old   = $service->upload( $this->zip( self::fixture(), 'old.zip' ), 'old.zip', 2 )['token'];
+		$new   = $service->upload( $this->zip( self::fixture(), 'new.zip' ), 'new.zip', 2 )['token'];
+		touch( $this->tmp . '/store/' . $old, time() - 2 * DAY_IN_SECONDS );
+		$this->assertSame( 1, $store->prune() );
+		$this->expectImportError( 'upload_expired', fn () => $service->analyze( $old, 2 ) );
+		$this->assertSame( $new, $service->analyze( $new, 2 )['token'] );
 	}
 
 	public function testMissingCssJsAndFailedAssetsArePartial(): void {

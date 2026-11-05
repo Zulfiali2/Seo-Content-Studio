@@ -47,6 +47,7 @@ use AiSeoContentStudio\REST\WebsiteStudioController;
 use AiSeoContentStudio\REST\ProjectImportController;
 use AiSeoContentStudio\WebsiteStudio\Import\ImportedPage;
 use AiSeoContentStudio\WebsiteStudio\Import\ImportService;
+use AiSeoContentStudio\WebsiteStudio\Import\ImportStore;
 use AiSeoContentStudio\Research\CompetitorFetcher;
 use AiSeoContentStudio\Research\CostEstimates;
 use AiSeoContentStudio\Research\DataForSEO\DataForSeoProvider;
@@ -394,6 +395,8 @@ final class Plugin {
 		( new AuditLog() )->prune( $days );
 		// Uploaded screenshots are deleted after analysis; this removes any left behind.
 		( new ScreenshotStore() )->prune( DAY_IN_SECONDS );
+		// Project ZIP uploads that were never built or discarded (kept for a day).
+		( new ImportStore() )->prune();
 		// Expired preview pages and the history of pages that were deleted.
 		$this->previews()->prune();
 		( new RevisionRepository() )->pruneOrphans();

@@ -23,6 +23,7 @@ php tests/run.php CssParser  # filter by class or method name
 | `StudioToolsTest` | Revision store (retention, snapshots), DraftManager revisions and captured Elementor edits, consistency checker (clean page, profile differences, colour fixes incl. kit globals, untouched sections), responsive and heading checks with fixes, accessibility checker (alt text, contrast, links, buttons, forms, small text) and fixes with user text, section transforms, section writer (request, structure kept, images reused, H1 rule), proposal preview/approve/discard and the regeneration job, revision compare/restore/undo section, design library (save, components, ownership, insert with new ids, duplicate, preview), REST permissions |
 | `GeneratorTest` | Generator answer to a valid PageDocument (paragraphs, prompts, CTA URL, image limit, one H1, background roles), request payload and strict schema, CTA URL safety, content-to-design rules (columns by card count and length, split/FAQ/buttons, long H1, missing H1), link suggestion validation and insertion (unpublished targets, existing links, whole words, escaping), fact check, kit tokens, all three jobs end to end with retries, image approval and discard |
 | `VisionTest` | ImageInput and messages with images, request hashes, OpenAI/Grok/Anthropic/Gemini vision bodies and capabilities, screenshot validation and tiling (tall images, metadata removal, corrupt files), temporary store (traversal, prune), strict vision schema, vision answer to a valid PageDocument (one H1, layout fixes, icons, tokens, placeholders), slots and new content (unknown keys never create elements), both screenshot jobs end to end with retries, kept text without AI |
+| `ProjectImportTest` | ZIP indexing without extraction, invalid ZIPs, nested folders and root-relative URLs, entry detection, traversal/absolute/drive paths, symlinks, size/count/bomb limits, HTML and SVG sanitising, CSS scoping (variables, media, keyframes, font-face, combinators), selector context, script analysis, hybrid/fidelity/native builds and their validation, upload → analyse → preview → build end to end with batching and idempotency, ownership, expiry and clean-up, partial conversions, script approvals bound to the code, asset content checks |
 | `CredentialRotationTest` | Reading with the previous key, re-encryption, wrong previous key leaves data untouched |
 
 The persistence tests use an in-memory SQLite `wpdb` double (`tests/fakes.php`), which checks the repository SQL and the permission logic. They do not replace a run on MySQL/MariaDB.
@@ -102,3 +103,11 @@ The 1.7.0 and 1.8.0 code has **not yet been run inside WordPress**. Before relea
   ```
 
   It builds a draft through the real engine, checks the rendered HTML, runs a consistency fix, a section proposal → preview → approve, an outside edit and a restore, and a library insert, then deletes everything it made. Exit code 0 means all checks passed. Run it with Elementor Free, with Pro, and with Flexbox Containers off.
+
+### Website project ZIP import (1.9.0-rc.2), still to be checked on a real site
+
+- Import a real project (for example the Dental Tax Advisors project) with Elementor Free and Pro, in each mode and page layout; compare the draft's front end and Elementor preview with the original at 1280, 768 and 390 px.
+- Images appear in the Media Library once (import the same ZIP twice); fonts load from `uploads/aiscs-imports/`.
+- Scripts: nothing runs before approval; after approval only on the page's front end; not in the Elementor editor or preview; approval lost after changing the code.
+- Update an imported draft: a revision is stored and can be restored.
+- Upload limits on hosts with low `upload_max_filesize`; `.htaccess`-less servers (nginx) still cannot list the temporary folder.

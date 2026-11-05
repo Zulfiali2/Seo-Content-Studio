@@ -2,6 +2,24 @@
 
 All notable changes to AI SEO Content Studio. Versions follow semantic versioning.
 
+## 1.9.0-rc.2 — 2026-11-05 — Website project ZIP import
+
+Added
+- **HTML to Elementor → Website project (ZIP)**: upload one ZIP with a whole static project. Entry page, stylesheets, scripts and assets are found automatically in any folder structure, including a single top folder and root-relative URLs. See `docs/website-studio/PROJECT-IMPORT.md`.
+  - Analysis: sections, headings, text, images, CSS files/rules/media queries/variables/keyframes, fonts, animations, interactive components, scripts with features and risks, missing files, links to pages outside the ZIP, unused and refused files, and everything removed for safety.
+  - Previews: original and converted page side by side or alone, desktop/tablet/mobile, in a sandboxed iframe with a strict CSP and no JavaScript.
+  - Conversion modes: hybrid (default), high fidelity, native. The report lists, per section, the native widgets and HTML widgets and why HTML was kept.
+  - CSS is kept and scoped to the page root (`CssScoper`): `:root`/`html`/`body` rules, class-scoped variables, `@media`/`@supports`/`@container`/`@layer`, renamed `@keyframes`, `@font-face`, `@import`, pseudo-elements and states. A baseline keeps theme and Elementor defaults out of the page.
+  - Assets: images through `media_handle_sideload()` with SHA-256 de-duplication; fonts in `uploads/aiscs-imports/{key}/`; SVG sanitised and kept as data URIs. Assets are imported in batches so large projects stay within request time limits.
+  - Page layout: Elementor Canvas, Elementor Full Width or theme default; the project's header/footer can be kept or dropped; a new draft or an update of an earlier imported draft (with a revision snapshot).
+  - JavaScript: analysed and stored off. Users with `unfiltered_html` approve each script; approval is bound to the code's SHA-256. Approved scripts run only on that page's front end, never in the admin, the Elementor editor or preview, the Customizer, REST or AJAX.
+- REST: `POST /design/import/upload`, `POST /design/import/{token}/analyze|preview|build`, `DELETE /design/import/{token}`, `GET /design/import/targets`, `GET|POST /design/import/pages/{id}/scripts`.
+- `DocumentValidator` mode `imported`; generation type `imported`.
+- `tests/unit/ProjectImportTest.php` and the fixture project `tests/fixtures/project-site/`.
+
+Changed
+- The daily clean-up also removes project uploads older than a day.
+
 ## 1.9.0-rc.1 — 2026-10-30 — AI Website Studio, phase 8: QA and release candidate
 
 Security

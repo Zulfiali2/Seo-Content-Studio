@@ -445,3 +445,20 @@ Every route requires `aiscs_generate_content`. Item routes require the owner (or
 - `POST /design/library/{id}/duplicate`
 - `POST /design/library/{id}/preview`: returns `{ preview_id, preview_url }`.
 - `POST /design/library/{id}/insert`: body `{ page_id, position }`, where −1 means the end. 409 `aiscs_needs_containers` when the item needs Flexbox Containers and the site does not have them.
+
+## Website project ZIP import (1.9.0-rc.2)
+
+Upload, analysis and build need `aiscs_generate_content` and `upload_files`; an upload token (32 hex characters) belongs to the user who uploaded it. Errors use `aiscs_{code}` (for example `aiscs_zip_invalid`, `aiscs_zip_bomb`, `aiscs_zip_too_large`, `aiscs_upload_expired`, `aiscs_busy`) with `data.errors` listing files and reasons. Details: `PROJECT-IMPORT.md`.
+
+| Route | Purpose |
+|---|---|
+| `POST /design/import/upload` | Multipart field `archive` (the ZIP). Returns the analysis (201) with `token`. |
+| `POST /design/import/{token}/analyze` | `entry`: analyse another HTML page of the ZIP. Cached per entry. |
+| `POST /design/import/{token}/preview` | `target`: `original` or `converted`; `settings`. Returns a self-contained HTML document for a sandboxed iframe. |
+| `POST /design/import/{token}/build` | `settings`. One step: imports a batch of assets, or writes the draft. Repeat until `done` is true. Returns the draft URLs, `report`, `partial`, `notes` and the stored scripts (without code). |
+| `DELETE /design/import/{token}` | Discard the upload. |
+| `GET /design/import/targets` | Imported drafts the user may update. |
+| `GET /design/import/pages/{id}/scripts` | Scripts of an imported page with their code, for review (`edit_post`). |
+| `POST /design/import/pages/{id}/scripts` | `approve`: SHA-256 hashes to approve; all others are switched off. Needs `unfiltered_html`. |
+
+`settings`: `title`, `entry`, `mode` (`hybrid` \| `fidelity` \| `native`), `template` (`canvas` \| `full_width` \| `default`), `header_footer` (`include` \| `skip`), `target` (0 = new draft), `reuse_assets`, `root_font`, `scripts` (`request` \| `off`).

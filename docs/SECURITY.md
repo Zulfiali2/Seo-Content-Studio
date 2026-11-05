@@ -212,6 +212,15 @@ Report vulnerabilities privately to the plugin maintainer, not in public issues.
 - **Revisions** are stored in the plugin's own table: compressed, limited per page and in size, deleted with the page, and pruned for deleted pages. Restores are themselves revisions.
 - **Design library** items are owned by their creator (managers see all). Saving validates the element in `cloned` mode and limits it to 1 MB. Inserting copies it with new ids, never shares ids with the target page, and is validated again.
 
+## AI Website Studio — website project ZIP import (1.9.0-rc.2)
+
+- The ZIP is read with `ZipArchive` and never extracted. Path traversal, absolute paths, symbolic links, encrypted entries, executable or server-side extensions (any `.php` in the name), unknown types, zip bombs and over-limit files are refused before reading. Limits are filterable (`aiscs_project_import_limits`).
+- Uploads live in `uploads/aiscs-studio-tmp/imports/{random token}/` behind deny rules, belong to their user, and are deleted on discard or after a day.
+- HTML is parsed without network access; scripts, handlers, `base`/`meta`/`link`, objects and frames are removed; iframes only for YouTube, Vimeo and Google Maps. SVG is sanitised with an allowlist. Images and fonts are checked by content.
+- Imported CSS only applies inside the page root and cannot close its `<style>` element.
+- Imported JavaScript never runs in privileged contexts (admin, Elementor editor and preview, Customizer, REST, AJAX, studio previews). It runs on the page's front end only after a user with `unfiltered_html` approved that exact code (SHA-256). External script URLs are never loaded.
+- Full details: `docs/website-studio/PROJECT-IMPORT.md`.
+
 ## AI Website Studio — phase 8 review (1.9.0-rc.1)
 
 - **Copied content and `unfiltered_html`.** `cloned` validation keeps an author's own page scripts only for users WordPress already trusts with unfiltered HTML. For everyone else, script and event-handler markup is refused, so the library, restores and fixes cannot be used for privilege escalation. Script URLs are refused in every mode.

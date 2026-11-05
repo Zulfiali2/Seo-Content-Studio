@@ -63,6 +63,7 @@ Baseline audited: **AI SEO Content Studio 1.6.8**, the uploaded ZIP. The brief n
 | 5 | Screenshot → design (vision) | **Done (1.9.0-beta.2)**, unit tests only |
 | 6 | Content-to-design generation, section images, internal links | **Done (1.9.0-beta.3)**, unit tests only |
 | 7 | Consistency checker, accessibility checker, section regeneration, preview, revisions, design library | **Done (1.9.0-beta.4)**, unit tests only |
+| 9 | Website project ZIP import (scoped CSS, hybrid builder, asset import, approved scripts) | **Done (1.9.0-rc.2)**: unit tests, browser test of the admin flow against the real service, visual comparison of the previews; live WP/Elementor run open |
 | 8 | QA, live WP/Elementor matrix, packaging | **Release candidate (1.9.0-rc.1)**: automated, security, performance and static compatibility done; live run open |
 
 ## 5. Phase 1 design (implemented)

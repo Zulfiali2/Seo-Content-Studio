@@ -4,7 +4,7 @@ Tags: seo, ai, content, elementor, keyword research
 Requires at least: 6.6
 Tested up to: 6.7
 Requires PHP: 8.2
-Stable tag: 1.9.0-rc.1
+Stable tag: 1.9.0-rc.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -54,6 +54,9 @@ Nothing is sent until you add a key and run an action.
 3. Go to AI SEO Studio → AI Providers, save an API key, run "Test connection", choose a text model and a default provider.
 
 == Changelog ==
+
+= 1.9.0-rc.2 =
+* HTML to Elementor now imports a complete website project from one ZIP (HTML, CSS, JavaScript, images, SVG icons, fonts). The original CSS is kept and scoped to the new page (variables, media queries, animations, fonts, hover states, pseudo-elements). Hybrid, high-fidelity and native modes; side-by-side sandboxed previews on desktop, tablet and mobile; images go to the Media Library without duplicates; the project's JavaScript is analysed, never run in the admin, and runs on the page only after an administrator approves it. Nothing in the ZIP is extracted or executed on the server.
 
 = 1.9.0-rc.1 =
 * AI Website Studio release candidate. Security: copied Elementor content (fixes, restores, library inserts) may only keep scripts for users allowed to publish unfiltered HTML. The responsive check follows Elementor's phone-width behaviour. Revision clean-up works on SQLite too. New user guide and QA report; live WordPress/Elementor smoke test included for staging sites.
